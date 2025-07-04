@@ -1,0 +1,1466 @@
+Directory structure:
+└── studio-admin-panel/
+    ├── README.md
+    ├── app.vue
+    ├── components.json
+    ├── nuxt.config.ts
+    ├── package.json
+    ├── tsconfig.json
+    ├── components/
+    │   └── ui/
+    │       ├── badge/
+    │       │   ├── Badge.vue
+    │       │   └── index.ts
+    │       ├── button/
+    │       │   ├── button.vue
+    │       │   └── index.ts
+    │       ├── card/
+    │       │   ├── Card.vue
+    │       │   ├── CardContent.vue
+    │       │   ├── CardDescription.vue
+    │       │   ├── CardFooter.vue
+    │       │   ├── CardHeader.vue
+    │       │   ├── CardTitle.vue
+    │       │   └── index.ts
+    │       ├── dialog/
+    │       │   ├── Dialog.vue
+    │       │   ├── DialogClose.vue
+    │       │   ├── DialogContent.vue
+    │       │   ├── DialogDescription.vue
+    │       │   ├── DialogFooter.vue
+    │       │   ├── DialogHeader.vue
+    │       │   ├── DialogScrollContent.vue
+    │       │   ├── DialogTitle.vue
+    │       │   └── DialogTrigger.vue
+    │       ├── input/
+    │       │   ├── index.ts
+    │       │   └── Input.vue
+    │       ├── label/
+    │       │   └── Label.vue
+    │       ├── table/
+    │       │   ├── index.ts
+    │       │   ├── Table.vue
+    │       │   ├── TableBody.vue
+    │       │   ├── TableCaption.vue
+    │       │   ├── TableCell.vue
+    │       │   ├── TableEmpty.vue
+    │       │   ├── TableFooter.vue
+    │       │   ├── TableHead.vue
+    │       │   ├── TableHeader.vue
+    │       │   └── TableRow.vue
+    │       ├── textarea/
+    │       │   └── Textarea.vue
+    │       └── toast/
+    │           ├── index.ts
+    │           ├── Toast.vue
+    │           ├── ToastAction.vue
+    │           ├── ToastClose.vue
+    │           ├── ToastDescription.vue
+    │           ├── Toaster.vue
+    │           ├── ToastProvider.vue
+    │           ├── ToastTitle.vue
+    │           ├── ToastViewport.vue
+    │           └── use-toast.ts
+    ├── lib/
+    │   └── utils.ts
+    ├── pages/
+    │   └── index.vue
+    ├── public/
+    │   └── robots.txt
+    └── server/
+        ├── tsconfig.json
+        └── api/
+            ├── inbox.get.js
+            └── emails/
+                └── process.post.js
+
+================================================
+FILE: README.md
+================================================
+# Nuxt Minimal Starter
+
+Look at the [Nuxt documentation](https://nuxt.com/docs/getting-started/introduction) to learn more.
+
+## Setup
+
+Make sure to install dependencies:
+
+```bash
+# npm
+npm install
+
+# pnpm
+pnpm install
+
+# yarn
+yarn install
+
+# bun
+bun install
+```
+
+## Development Server
+
+Start the development server on `http://localhost:3000`:
+
+```bash
+# npm
+npm run dev
+
+# pnpm
+pnpm dev
+
+# yarn
+yarn dev
+
+# bun
+bun run dev
+```
+
+## Production
+
+Build the application for production:
+
+```bash
+# npm
+npm run build
+
+# pnpm
+pnpm build
+
+# yarn
+yarn build
+
+# bun
+bun run build
+```
+
+Locally preview production build:
+
+```bash
+# npm
+npm run preview
+
+# pnpm
+pnpm preview
+
+# yarn
+yarn preview
+
+# bun
+bun run preview
+```
+
+Check out the [deployment documentation](https://nuxt.com/docs/getting-started/deployment) for more information.
+
+
+
+================================================
+FILE: app.vue
+================================================
+<!-- File: app.vue -->
+<template>
+  <div>
+    <!-- Questo componente Ã¨ utile per l'accessibilitÃ , annuncia i cambi di pagina agli screen reader -->
+    <NuxtRouteAnnouncer />
+    
+    <!-- Questo Ã¨ il componente piÃ¹ importante.
+         Nuxt renderizzerÃ  qui il contenuto della pagina corrente (es. pages/index.vue) -->
+    <NuxtPage />
+  </div>
+</template>
+
+<style>
+/* Aggiungiamo uno stile di base per lo sfondo, cosÃ¬ l'app non Ã¨ completamente bianca */
+body {
+  background-color: #f8f9fa; /* Un grigio molto chiaro */
+  color: #212529; /* Un nero morbido */
+}
+
+/* Stili per il tema scuro (opzionale, ma buona pratica) */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #121212; /* Un grigio scuro */
+    color: #e0e0e0; /* Un bianco sporco */
+  }
+}
+</style>
+
+
+================================================
+FILE: components.json
+================================================
+{
+  "$schema": "https://shadcn-vue.com/schema.json",
+  "style": "default",
+  "tailwind": { "config": "tailwind.config.ts", "css": "assets/css/main.css", "baseColor": "slate", "cssVariables": true },
+  "framework": "nuxt",
+  "aliases": { "components": "@/components", "utils": "@/lib/utils" }
+}
+
+
+================================================
+FILE: nuxt.config.ts
+================================================
+// File: nuxt.config.ts
+
+export default defineNuxtConfig({
+  devtools: { enabled: true },
+  
+  modules: [
+    '@nuxtjs/tailwindcss',
+    '@nuxtjs/supabase',
+    'shadcn-nuxt'
+  ],
+
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    key: process.env.NUXT_PUBLIC_SUPABASE_KEY,
+    redirect: false,
+  },
+
+  shadcn: {
+    prefix: '',
+    componentDir: './components/ui'
+  },
+
+  runtimeConfig: {
+    googleApiKey: process.env.GOOGLE_API_KEY,
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    public: {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
+    }
+  },
+})
+
+
+================================================
+FILE: package.json
+================================================
+{
+  "name": "nuxt-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@vueuse/core": "^13.5.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-vue-next": "^0.525.0",
+    "nuxt": "^3.17.6",
+    "radix-vue": "^1.9.17",
+    "tailwind-merge": "^3.3.1",
+    "vue": "^3.5.17",
+    "vue-router": "^4.5.1"
+  },
+  "devDependencies": {
+    "@nuxtjs/supabase": "^1.5.3",
+    "@nuxtjs/tailwindcss": "^7.0.0-beta.0",
+    "shadcn-nuxt": "^2.2.0"
+  }
+}
+
+
+
+================================================
+FILE: tsconfig.json
+================================================
+{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json"
+}
+
+
+
+================================================
+FILE: components/ui/badge/Badge.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { type BadgeVariants, badgeVariants } from '.'
+import { cn } from '@/lib/utils'
+interface Props { variant?: BadgeVariants['variant']; class?: HTMLAttributes['class'] }
+const props = defineProps<Props>()
+</script>
+<template><div :class="cn(badgeVariants({ variant }), props.class)"><slot /></div></template>
+
+
+================================================
+FILE: components/ui/badge/index.ts
+================================================
+import { type VariantProps, cva } from 'class-variance-authority'
+export { default as Badge } from './Badge.vue'
+export const badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2', {
+    variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80', secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80', destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80', outline: 'text-foreground' } },
+    defaultVariants: { variant: 'default' },
+})
+export type BadgeVariants = VariantProps<typeof badgeVariants>
+
+
+================================================
+FILE: components/ui/button/button.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { Primitive, type PrimitiveProps } from 'radix-vue'
+import { type ButtonVariants, buttonVariants } from '.'
+import { cn } from '@/lib/utils'
+interface Props extends PrimitiveProps { variant?: ButtonVariants['variant']; size?: ButtonVariants['size']; class?: HTMLAttributes['class'] }
+const props = withDefaults(defineProps<Props>(), { as: 'button' })
+</script>
+<template>
+  <Primitive :as="as" :as-child="asChild" :class="cn(buttonVariants({ variant, size }), props.class)"><slot /></Primitive>
+</template>
+
+
+================================================
+FILE: components/ui/button/index.ts
+================================================
+import { type VariantProps, cva } from 'class-variance-authority'
+export { default as Button } from './Button.vue'
+export const buttonVariants = cva('inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50', {
+    variants: {
+        variant: {
+        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+        outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        link: 'text-primary underline-offset-4 hover:underline',
+        },
+        size: {
+        default: 'h-10 px-4 py-2',
+        sm: 'h-9 rounded-md px-3',
+        lg: 'h-11 rounded-md px-8',
+        icon: 'h-10 w-10',
+        },
+    },
+    defaultVariants: { variant: 'default', size: 'default' },
+})
+export type ButtonVariants = VariantProps<typeof buttonVariants>
+
+
+================================================
+FILE: components/ui/card/Card.vue
+================================================
+<template><div :class="cn('rounded-lg border bg-card text-card-foreground shadow-sm', props.class)"><slot /></div></template>
+<script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; 
+const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/CardContent.vue
+================================================
+<template><div :class="cn('p-6 pt-0', props.class)"><slot /></div></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/CardDescription.vue
+================================================
+<template><p :class="cn('text-sm text-muted-foreground', props.class)"><slot /></p></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/CardFooter.vue
+================================================
+<template><div :class="cn('flex items-center p-6 pt-0', props.class)"><slot /></div></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/CardHeader.vue
+================================================
+<template><div :class="cn('flex flex-col space-y-1.5 p-6', props.class)"><slot /></div></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/CardTitle.vue
+================================================
+<template><h3 :class="cn('text-2xl font-semibold leading-none tracking-tight', props.class)"><slot /></h3></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/card/index.ts
+================================================
+export { default as Card } from './Card.vue'
+export { default as CardHeader } from './CardHeader.vue'
+export { default as CardTitle } from './CardTitle.vue'
+export { default as CardDescription } from './CardDescription.vue'
+export { default as CardContent } from './CardContent.vue'
+export { default as CardFooter } from './CardFooter.vue'
+
+
+================================================
+FILE: components/ui/dialog/Dialog.vue
+================================================
+<script setup lang="ts">
+import { DialogRoot, type DialogRootEmits, type DialogRootProps, useForwardPropsEmits } from 'radix-vue'
+const props = defineProps<DialogRootProps>()
+const emits = defineEmits<DialogRootEmits>()
+const forwarded = useForwardPropsEmits(props, emits)
+</script>
+<template><DialogRoot v-bind="forwarded"><slot /></DialogRoot></template>
+
+
+================================================
+FILE: components/ui/dialog/DialogClose.vue
+================================================
+<script setup lang="ts">
+import { DialogClose, type DialogCloseProps } from 'reka-ui'
+
+const props = defineProps<DialogCloseProps>()
+</script>
+
+<template>
+  <DialogClose v-bind="props">
+    <slot />
+  </DialogClose>
+</template>
+
+
+
+================================================
+FILE: components/ui/dialog/DialogContent.vue
+================================================
+<script setup lang="ts">
+import { type HTMLAttributes, computed } from 'vue'
+import { DialogClose, DialogContent, type DialogContentEmits, type DialogContentProps, DialogOverlay, DialogPortal, useForwardPropsEmits } from 'radix-vue'
+import { X } from 'lucide-vue-next'
+import { cn } from '@/lib/utils'
+const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const emits = defineEmits<DialogContentEmits>()
+const delegatedProps = computed(() => { const { class: _, ...delegated } = props; return delegated })
+const forwarded = useForwardPropsEmits(delegatedProps, emits)
+</script>
+<template>
+  <DialogPortal>
+    <DialogOverlay class="fixed inset-0 z-50 bg-black/80" />
+    <DialogContent v-bind="forwarded" :class="cn('fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg', props.class)">
+      <slot />
+      <DialogClose class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
+        <X class="h-4 w-4" />
+        <span class="sr-only">Close</span>
+      </DialogClose>
+    </DialogContent>
+  </DialogPortal>
+</template>
+
+
+================================================
+FILE: components/ui/dialog/DialogDescription.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { DialogDescription, type DialogDescriptionProps } from 'radix-vue'
+import { cn } from '@/lib/utils'
+const props = defineProps<DialogDescriptionProps & { class?: HTMLAttributes['class'] }>()
+</script>
+<template><DialogDescription :class="cn('text-sm text-muted-foreground', props.class)" v-bind="props"><slot /></DialogDescription></template>
+
+
+================================================
+FILE: components/ui/dialog/DialogFooter.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
+const props = defineProps<{ class?: HTMLAttributes['class'] }>()
+</script>
+<template><div :class="cn('flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2', props.class)"><slot /></div></template>
+
+
+================================================
+FILE: components/ui/dialog/DialogHeader.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
+const props = defineProps<{ class?: HTMLAttributes['class'] }>()
+</script>
+<template><div :class="cn('flex flex-col space-y-1.5 text-center sm:text-left', props.class)"><slot /></div></template>
+
+
+================================================
+FILE: components/ui/dialog/DialogScrollContent.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { X } from 'lucide-vue-next'
+import {
+  DialogClose,
+  DialogContent,
+  type DialogContentEmits,
+  type DialogContentProps,
+  DialogOverlay,
+  DialogPortal,
+  useForwardPropsEmits,
+} from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const emits = defineEmits<DialogContentEmits>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+
+const forwarded = useForwardPropsEmits(delegatedProps, emits)
+</script>
+
+<template>
+  <DialogPortal>
+    <DialogOverlay
+      class="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
+    >
+      <DialogContent
+        :class="
+          cn(
+            'relative z-50 grid w-full max-w-lg my-8 gap-4 border border-border bg-background p-6 shadow-lg duration-200 sm:rounded-lg md:w-full',
+            props.class,
+          )
+        "
+        v-bind="forwarded"
+        @pointer-down-outside="(event) => {
+          const originalEvent = event.detail.originalEvent;
+          const target = originalEvent.target as HTMLElement;
+          if (originalEvent.offsetX > target.clientWidth || originalEvent.offsetY > target.clientHeight) {
+            event.preventDefault();
+          }
+        }"
+      >
+        <slot />
+
+        <DialogClose
+          class="absolute top-4 right-4 p-0.5 transition-colors rounded-md hover:bg-secondary"
+        >
+          <X class="w-4 h-4" />
+          <span class="sr-only">Close</span>
+        </DialogClose>
+      </DialogContent>
+    </DialogOverlay>
+  </DialogPortal>
+</template>
+
+
+
+================================================
+FILE: components/ui/dialog/DialogTitle.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { DialogTitle, type DialogTitleProps } from 'radix-vue'
+import { cn } from '@/lib/utils'
+const props = defineProps<DialogTitleProps & { class?: HTMLAttributes['class'] }>()
+</script>
+<template><DialogTitle v-bind="props" :class="cn('text-lg font-semibold leading-none tracking-tight', props.class)"><slot /></DialogTitle></template>
+
+
+================================================
+FILE: components/ui/dialog/DialogTrigger.vue
+================================================
+<script setup lang="ts">
+import { DialogTrigger, type DialogTriggerProps } from 'radix-vue'
+const props = defineProps<DialogTriggerProps>()
+</script>
+<template><DialogTrigger v-bind="props"><slot /></DialogTrigger></template>
+
+
+================================================
+FILE: components/ui/input/index.ts
+================================================
+export { default as Input } from './Input.vue'
+
+
+
+================================================
+FILE: components/ui/input/Input.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { useVModel } from '@vueuse/core'
+import { cn } from '@/lib/utils'
+const props = defineProps<{ defaultValue?: string | number; modelValue?: string | number; class?: HTMLAttributes['class'] }>()
+const emits = defineEmits<{ (e: 'update:modelValue', payload: string | number): void }>()
+const modelValue = useVModel(props, 'modelValue', emits, { passive: true, defaultValue: props.defaultValue })
+</script>
+<template><input v-model="modelValue" :class="cn('flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50', props.class)"></template>
+
+
+================================================
+FILE: components/ui/label/Label.vue
+================================================
+<script setup lang="ts">
+import { type HTMLAttributes, type LabelHTMLAttributes } from 'vue'
+import { Label, type LabelProps } from 'radix-vue'
+import { cn } from '@/lib/utils'
+const props = defineProps<LabelProps & { class?: HTMLAttributes['class'] }>()
+</script>
+<template><Label :class="cn('text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70', props.class)"><slot /></Label></template>
+
+
+================================================
+FILE: components/ui/table/index.ts
+================================================
+// File: components/ui/table/index.ts
+
+export { default as Table } from './Table.vue'
+export { default as TableHeader } from './TableHeader.vue'
+export { default as TableBody } from './TableBody.vue' // Assicurati che sia .vue
+export { default as TableRow } from './TableRow.vue'
+export { default as TableHead } from './TableHead.vue'
+export { default as TableCell } from './TableCell.vue'
+
+
+================================================
+FILE: components/ui/table/Table.vue
+================================================
+<template><div class="relative w-full overflow-auto"><table :class="cn('w-full caption-bottom text-sm', props.class)"><slot /></table></div></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/table/TableBody.vue
+================================================
+<template><tbody :class="cn('[&_tr:last-child]:border-0', props.class)"><slot /></tbody></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/table/TableCaption.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+</script>
+
+<template>
+  <caption :class="cn('mt-4 text-sm text-muted-foreground', props.class)">
+    <slot />
+  </caption>
+</template>
+
+
+
+================================================
+FILE: components/ui/table/TableCell.vue
+================================================
+<template><td :class="cn('p-4 align-middle [&:has([role=checkbox])]:pr-0', props.class)"><slot /></td></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/table/TableEmpty.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { cn } from '@/lib/utils'
+import TableCell from './TableCell.vue'
+import TableRow from './TableRow.vue'
+
+const props = withDefaults(defineProps<{
+  class?: HTMLAttributes['class']
+  colspan?: number
+}>(), {
+  colspan: 1,
+})
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <TableRow>
+    <TableCell
+      :class="
+        cn(
+          'p-4 whitespace-nowrap align-middle text-sm text-foreground',
+          props.class,
+        )
+      "
+      v-bind="delegatedProps"
+    >
+      <div class="flex items-center justify-center py-10">
+        <slot />
+      </div>
+    </TableCell>
+  </TableRow>
+</template>
+
+
+
+================================================
+FILE: components/ui/table/TableFooter.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+</script>
+
+<template>
+  <tfoot :class="cn('border-t bg-muted/50 font-medium [&>tr]:last:border-b-0', props.class)">
+    <slot />
+  </tfoot>
+</template>
+
+
+
+================================================
+FILE: components/ui/table/TableHead.vue
+================================================
+<template><th :class="cn('h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0', props.class)"><slot /></th></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/table/TableHeader.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<{
+  class?: HTMLAttributes['class']
+}>()
+</script>
+
+<template>
+  <th :class="cn('h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-0.5', props.class)">
+    <slot />
+  </th>
+</template>
+
+
+
+================================================
+FILE: components/ui/table/TableRow.vue
+================================================
+<template><tr :class="cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', props.class)"><slot /></tr></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+
+
+================================================
+FILE: components/ui/textarea/Textarea.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { useVModel } from '@vueuse/core'
+import { cn } from '@/lib/utils'
+const props = defineProps<{ class?: HTMLAttributes['class']; defaultValue?: string | number; modelValue?: string | number }>()
+const emits = defineEmits<(e: 'update:modelValue', payload: string | number) => void>()
+const modelValue = useVModel(props, 'modelValue', emits, { passive: true, defaultValue: props.defaultValue })
+</script>
+<template><textarea v-model="modelValue" :class="cn('flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50', props.class)" /></template>
+
+
+================================================
+FILE: components/ui/toast/index.ts
+================================================
+import type { ToastRootProps } from 'reka-ui'
+import type { HTMLAttributes } from 'vue'
+
+export { default as Toast } from './Toast.vue'
+export { default as ToastAction } from './ToastAction.vue'
+export { default as ToastClose } from './ToastClose.vue'
+export { default as ToastDescription } from './ToastDescription.vue'
+export { default as Toaster } from './Toaster.vue'
+export { default as ToastProvider } from './ToastProvider.vue'
+export { default as ToastTitle } from './ToastTitle.vue'
+export { default as ToastViewport } from './ToastViewport.vue'
+export { toast, useToast } from './use-toast'
+
+import { cva, type VariantProps } from 'class-variance-authority'
+
+export const toastVariants = cva(
+  'group pointer-events-auto relative flex w-full items-center justify-between space-x-2 overflow-hidden rounded-md border p-4 pr-6 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--reka-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--reka-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full',
+  {
+    variants: {
+      variant: {
+        default: 'border bg-background text-foreground',
+        destructive:
+                    'destructive group border-destructive bg-destructive text-destructive-foreground',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+)
+
+type ToastVariants = VariantProps<typeof toastVariants>
+
+export interface ToastProps extends ToastRootProps {
+  class?: HTMLAttributes['class']
+  variant?: ToastVariants['variant']
+  onOpenChange?: ((value: boolean) => void) | undefined
+}
+
+
+
+================================================
+FILE: components/ui/toast/Toast.vue
+================================================
+<script setup lang="ts">
+import { reactiveOmit } from '@vueuse/core'
+import { ToastRoot, type ToastRootEmits, useForwardPropsEmits } from 'reka-ui'
+import { cn } from '@/lib/utils'
+import { type ToastProps, toastVariants } from '.'
+
+const props = defineProps<ToastProps>()
+
+const emits = defineEmits<ToastRootEmits>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+
+const forwarded = useForwardPropsEmits(delegatedProps, emits)
+</script>
+
+<template>
+  <ToastRoot
+    v-bind="forwarded"
+    :class="cn(toastVariants({ variant }), props.class)"
+    @update:open="onOpenChange"
+  >
+    <slot />
+  </ToastRoot>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastAction.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { ToastAction, type ToastActionProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<ToastActionProps & { class?: HTMLAttributes['class'] }>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <ToastAction v-bind="delegatedProps" :class="cn('inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium transition-colors hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive', props.class)">
+    <slot />
+  </ToastAction>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastClose.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { X } from 'lucide-vue-next'
+import { ToastClose, type ToastCloseProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<ToastCloseProps & {
+  class?: HTMLAttributes['class']
+}>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <ToastClose v-bind="delegatedProps" :class="cn('absolute right-1 top-1 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-1 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600', props.class)">
+    <X class="h-4 w-4" />
+  </ToastClose>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastDescription.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { ToastDescription, type ToastDescriptionProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<ToastDescriptionProps & { class?: HTMLAttributes['class'] }>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <ToastDescription :class="cn('text-sm opacity-90', props.class)" v-bind="delegatedProps">
+    <slot />
+  </ToastDescription>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/Toaster.vue
+================================================
+<script setup lang="ts">
+import { isVNode } from 'vue'
+import { Toast, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from '.'
+import { useToast } from './use-toast'
+
+const { toasts } = useToast()
+</script>
+
+<template>
+  <ToastProvider>
+    <Toast v-for="toast in toasts" :key="toast.id" v-bind="toast">
+      <div class="grid gap-1">
+        <ToastTitle v-if="toast.title">
+          {{ toast.title }}
+        </ToastTitle>
+        <template v-if="toast.description">
+          <ToastDescription v-if="isVNode(toast.description)">
+            <component :is="toast.description" />
+          </ToastDescription>
+          <ToastDescription v-else>
+            {{ toast.description }}
+          </ToastDescription>
+        </template>
+        <ToastClose />
+      </div>
+      <component :is="toast.action" />
+    </Toast>
+    <ToastViewport />
+  </ToastProvider>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastProvider.vue
+================================================
+<script setup lang="ts">
+import { ToastProvider, type ToastProviderProps } from 'reka-ui'
+
+const props = defineProps<ToastProviderProps>()
+</script>
+
+<template>
+  <ToastProvider v-bind="props">
+    <slot />
+  </ToastProvider>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastTitle.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { ToastTitle, type ToastTitleProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<ToastTitleProps & { class?: HTMLAttributes['class'] }>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <ToastTitle v-bind="delegatedProps" :class="cn('text-sm font-semibold [&+div]:text-xs', props.class)">
+    <slot />
+  </ToastTitle>
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/ToastViewport.vue
+================================================
+<script setup lang="ts">
+import type { HTMLAttributes } from 'vue'
+import { reactiveOmit } from '@vueuse/core'
+import { ToastViewport, type ToastViewportProps } from 'reka-ui'
+import { cn } from '@/lib/utils'
+
+const props = defineProps<ToastViewportProps & { class?: HTMLAttributes['class'] }>()
+
+const delegatedProps = reactiveOmit(props, 'class')
+</script>
+
+<template>
+  <ToastViewport v-bind="delegatedProps" :class="cn('fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]', props.class)" />
+</template>
+
+
+
+================================================
+FILE: components/ui/toast/use-toast.ts
+================================================
+import type { Component, VNode } from 'vue'
+import type { ToastProps } from '.'
+import { computed, ref } from 'vue'
+
+const TOAST_LIMIT = 1
+const TOAST_REMOVE_DELAY = 1000000
+
+export type StringOrVNode =
+  | string
+  | VNode
+  | (() => VNode)
+
+type ToasterToast = ToastProps & {
+  id: string
+  title?: string
+  description?: StringOrVNode
+  action?: Component
+}
+
+const actionTypes = {
+  ADD_TOAST: 'ADD_TOAST',
+  UPDATE_TOAST: 'UPDATE_TOAST',
+  DISMISS_TOAST: 'DISMISS_TOAST',
+  REMOVE_TOAST: 'REMOVE_TOAST',
+} as const
+
+let count = 0
+
+function genId() {
+  count = (count + 1) % Number.MAX_VALUE
+  return count.toString()
+}
+
+type ActionType = typeof actionTypes
+
+type Action =
+  | {
+    type: ActionType['ADD_TOAST']
+    toast: ToasterToast
+  }
+  | {
+    type: ActionType['UPDATE_TOAST']
+    toast: Partial<ToasterToast>
+  }
+  | {
+    type: ActionType['DISMISS_TOAST']
+    toastId?: ToasterToast['id']
+  }
+  | {
+    type: ActionType['REMOVE_TOAST']
+    toastId?: ToasterToast['id']
+  }
+
+interface State {
+  toasts: ToasterToast[]
+}
+
+const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
+function addToRemoveQueue(toastId: string) {
+  if (toastTimeouts.has(toastId))
+    return
+
+  const timeout = setTimeout(() => {
+    toastTimeouts.delete(toastId)
+    dispatch({
+      type: actionTypes.REMOVE_TOAST,
+      toastId,
+    })
+  }, TOAST_REMOVE_DELAY)
+
+  toastTimeouts.set(toastId, timeout)
+}
+
+const state = ref<State>({
+  toasts: [],
+})
+
+function dispatch(action: Action) {
+  switch (action.type) {
+    case actionTypes.ADD_TOAST:
+      state.value.toasts = [action.toast, ...state.value.toasts].slice(0, TOAST_LIMIT)
+      break
+
+    case actionTypes.UPDATE_TOAST:
+      state.value.toasts = state.value.toasts.map(t =>
+        t.id === action.toast.id ? { ...t, ...action.toast } : t,
+      )
+      break
+
+    case actionTypes.DISMISS_TOAST: {
+      const { toastId } = action
+
+      if (toastId) {
+        addToRemoveQueue(toastId)
+      }
+      else {
+        state.value.toasts.forEach((toast) => {
+          addToRemoveQueue(toast.id)
+        })
+      }
+
+      state.value.toasts = state.value.toasts.map(t =>
+        t.id === toastId || toastId === undefined
+          ? {
+              ...t,
+              open: false,
+            }
+          : t,
+      )
+      break
+    }
+
+    case actionTypes.REMOVE_TOAST:
+      if (action.toastId === undefined)
+        state.value.toasts = []
+      else
+        state.value.toasts = state.value.toasts.filter(t => t.id !== action.toastId)
+
+      break
+  }
+}
+
+function useToast() {
+  return {
+    toasts: computed(() => state.value.toasts),
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: actionTypes.DISMISS_TOAST, toastId }),
+  }
+}
+
+type Toast = Omit<ToasterToast, 'id'>
+
+function toast(props: Toast) {
+  const id = genId()
+
+  const update = (props: ToasterToast) =>
+    dispatch({
+      type: actionTypes.UPDATE_TOAST,
+      toast: { ...props, id },
+    })
+
+  const dismiss = () => dispatch({ type: actionTypes.DISMISS_TOAST, toastId: id })
+
+  dispatch({
+    type: actionTypes.ADD_TOAST,
+    toast: {
+      ...props,
+      id,
+      open: true,
+      onOpenChange: (open: boolean) => {
+        if (!open)
+          dismiss()
+      },
+    },
+  })
+
+  return {
+    id,
+    dismiss,
+    update,
+  }
+}
+
+export { toast, useToast }
+
+
+
+================================================
+FILE: lib/utils.ts
+================================================
+import { type ClassValue, clsx } from 'clsx'
+import { twMerge } from 'tailwind-merge'
+export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)) }
+
+
+================================================
+FILE: pages/index.vue
+================================================
+<!-- File: pages/index.vue -->
+<script setup>
+// NESSUN IMPORT DI COMPONENTI QUI. NUXT LI GESTIRÃ€ AUTOMATICAMENTE.
+import { ref, onMounted } from 'vue';
+
+// --- STATO DELLA PAGINA (rimane invariato) ---
+const processedEmails = ref([]);
+const unprocessedEmails = ref([]);
+const selectedEmailContent = ref(null);
+const showContentModal = ref(false);
+const isLoading = ref(true);
+const isProcessing = ref(false);
+
+// --- DATI DI ESEMPIO (rimangono invariati) ---
+const getSampleEmails = () => [
+  { id: 'sample-1', sender: 'cliente.tech@email.com', subject: 'Problema con login su App Mobile', body_text: 'Ciao, da stamattina non riesco piÃ¹ ad accedere all"applicazione mobile, continua a darmi "errore di autenticazione". Potete verificare? Grazie.' },
+  { id: 'sample-2', sender: 'fornitore.fiscale@email.com', subject: 'Richiesta documenti per dichiarazione IVA', body_text: 'Buongiorno, avremmo bisogno delle fatture di acquisto del terzo trimestre per procedere con la dichiarazione IVA. Potete inviarcele? Saluti, Studio Legale Tributario.' },
+  { id: 'sample-3', sender: 'info@eventifiera.com', subject: 'Invito a Fiera del Digitale 2024', body_text: 'Siamo lieti di invitarvi alla Fiera del Digitale che si terrÃ  a Milano il prossimo mese. Sarebbe un"opportunitÃ  per presentare il vostro gestionale. Restiamo in attesa di un vostro gentile riscontro.' },
+];
+
+// --- FUNZIONI PRINCIPALI (rimangono invariate) ---
+const fetchProcessedEmails = async () => {
+  isLoading.value = true;
+  try {
+    processedEmails.value = await $fetch('/api/inbox');
+  } catch (error) { console.error("Impossibile caricare la posta smistata:", error); }
+  finally { isLoading.value = false; }
+};
+
+const processNextEmail = async () => {
+  if (unprocessedEmails.value.length === 0) return;
+  isProcessing.value = true;
+  const emailToProcess = unprocessedEmails.value[0];
+  try {
+    await $fetch('/api/emails/process', {
+      method: 'POST',
+      body: { sender: emailToProcess.sender, subject: emailToProcess.subject, body_text: emailToProcess.body_text },
+    });
+    unprocessedEmails.value.shift();
+    await fetchProcessedEmails();
+  } catch (error) { alert(`Si Ã¨ verificato un errore: ${error.data?.message || error.message}`); }
+  finally { isProcessing.value = false; }
+};
+
+const viewEmailContent = (email) => {
+  selectedEmailContent.value = email;
+  showContentModal.value = true;
+};
+
+const resetSimulation = () => {
+  unprocessedEmails.value = getSampleEmails();
+  alert('Simulazione resettata.');
+};
+
+// --- FUNZIONI UTILI (rimangono invariate) ---
+const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
+const getConfidenceVariant = (score) => {
+  if (score === null) return 'secondary';
+  if (score >= 0.8) return 'default';
+  if (score >= 0.5) return 'secondary';
+  return 'destructive';
+};
+
+// --- HOOK (rimane invariato) ---
+onMounted(() => {
+  unprocessedEmails.value = getSampleEmails();
+  fetchProcessedEmails();
+});
+</script>
+
+<template>
+  <div class="container mx-auto p-4 md:p-8 space-y-8">
+    <Card>
+      <CardHeader>
+        <div class="flex justify-between items-center">
+          <div>
+            <CardTitle>Casella di Posta in Arrivo (Simulata)</CardTitle>
+            <CardDescription>Email "in attesa" di essere analizzate dall'AI.</CardDescription>
+          </div>
+          <Button @click="resetSimulation" variant="outline">Resetta Simulazione</Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <ul v-if="unprocessedEmails.length > 0" class="space-y-2">
+          <li v-for="email in unprocessedEmails" :key="email.id" class="p-3 border rounded-md bg-muted/20">
+            <p class="font-medium">{{ email.subject }}</p>
+            <p class="text-sm text-muted-foreground">Da: {{ email.sender }}</p>
+          </li>
+        </ul>
+        <p v-else class="text-muted-foreground">Tutte le email sono state processate!</p>
+        <Button @click="processNextEmail" :disabled="isProcessing || unprocessedEmails.length === 0" class="w-full mt-4">
+          <span v-if="isProcessing">Analisi in corso...</span>
+          <span v-else>Processa Prossima Email ({{ unprocessedEmails.length }} Rimanenti)</span>
+        </Button>
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Posta Smistata dall'AI</CardTitle>
+        <CardDescription>Elenco delle email analizzate e assegnate a un dipartimento/responsabile.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div v-if="isLoading" class="text-center py-16"><p>Caricamento storico...</p></div>
+        <div v-else-if="processedEmails.length > 0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mittente & Oggetto</TableHead>
+                <TableHead>Etichetta (Assegnato A)</TableHead>
+                <TableHead class="text-center">Confidenza AI</TableHead>
+                <TableHead class="text-right">Ricevuta il</TableHead>
+                <TableHead class="text-center">Contenuto</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="email in processedEmails" :key="email.id">
+                <TableCell class="font-medium">
+                  <div>{{ email.sender }}</div>
+                  <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">{{ email.staff?.name || 'Non Assegnato' }}</Badge>
+                </TableCell>
+                <TableCell class="text-center">
+                  <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
+                    {{ email.ai_confidence_score ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
+                <TableCell class="text-center">
+                   <Button @click="viewEmailContent(email)" variant="ghost" size="sm">Visualizza</Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-else class="text-center py-16"><p class="text-muted-foreground">Nessuna email Ã¨ stata ancora processata.</p></div>
+      </CardContent>
+    </Card>
+    
+    <Dialog :open="showContentModal" @update:open="showContentModal = false">
+      <DialogContent v-if="selectedEmailContent">
+          <DialogHeader>
+              <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
+              <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
+          </DialogHeader>
+          <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
+              {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
+          </div>
+          <DialogFooter>
+              <Button @click="showContentModal = false">Chiudi</Button>
+          </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  </div>
+</template>
+
+
+================================================
+FILE: public/robots.txt
+================================================
+User-Agent: *
+Disallow:
+
+
+
+================================================
+FILE: server/tsconfig.json
+================================================
+{
+  "extends": "../.nuxt/tsconfig.server.json"
+}
+
+
+
+================================================
+FILE: server/api/inbox.get.js
+================================================
+// File: server/api/inbox.get.js
+
+import { defineEventHandler } from 'h3';
+import { serverSupabaseClient } from '#supabase/server';
+
+export default defineEventHandler(async (event) => {
+  const supabase = await serverSupabaseClient(event);
+
+  const { data, error } = await supabase
+    .from('incoming_emails')
+    .select(`
+      id, created_at, sender, subject, body_text, status,
+      ai_confidence_score, ai_reasoning,
+      staff:assigned_to_staff_id ( id, name, email )
+    `)
+    .order('created_at', { ascending: false });
+
+  if (error) throw createError({ statusCode: 500, statusMessage: error.message });
+  return data;
+});
+
+
+================================================
+FILE: server/api/emails/process.post.js
+================================================
+// File: server/api/emails/process.post.js
+
+import { defineEventHandler, readBody, createError } from 'h3';
+import { serverSupabaseClient } from '#supabase/server';
+import { useRuntimeConfig } from '#imports';
+import { $fetch } from 'ofetch';
+
+const config = useRuntimeConfig();
+const GOOGLE_API_KEY = config.googleApiKey;
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
+
+const PROMPT_EMAIL_TRIAGE = `
+Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito Ã¨ analizzare un'email in arrivo e assegnarla al dipartimento o alla persona piÃ¹ appropriata.
+
+Ecco la lista del personale e delle loro responsabilitÃ :
+--- LISTA PERSONALE ---
+{staff_list}
+-----------------------
+
+Analizza il seguente contenuto dell'email (oggetto e corpo) e determina quale persona/dipartimento Ã¨ il piÃ¹ adatto a gestirla.
+
+--- CONTENUTO EMAIL ---
+Oggetto: {email_subject}
+Corpo: {email_body}
+-----------------------
+
+La tua risposta DEVE essere un oggetto JSON con il seguente formato, senza alcun testo aggiuntivo:
+{
+  "best_match_staff_id": "l'UUID del dipendente/dipartimento scelto dalla lista",
+  "confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
+  "reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipartimento. Esempio: 'L'email menziona problemi di accesso al software, che Ã¨ di competenza del Supporto Tecnico.'"
+}
+
+Se NESSUNO sembra appropriato, rispondi con l'ID della "Segreteria Generale" o del dipartimento di default e un confidence_score basso.
+`;
+
+async function callGemini(prompt) {
+    const response = await $fetch.raw(GEMINI_API_URL, {
+        method: 'POST', body: { contents: [{ parts: [{ text: prompt }] }] }
+    });
+    const responseData = response._data;
+    if (!responseData.candidates?.[0]) throw new Error('Risposta non valida da Gemini');
+    return responseData.candidates[0].content.parts[0].text;
+}
+
+export default defineEventHandler(async (event) => {
+    const supabase = await serverSupabaseClient(event);
+    const body = await readBody(event);
+    const { sender, subject, body_text } = body;
+    if (!subject || !body_text) throw createError({ statusCode: 400, statusMessage: 'Oggetto o corpo email mancanti.' });
+
+    const { data: staff, error: staffError } = await supabase.from('staff').select('id, name, responsibilities');
+    if (staffError) throw createError({ statusCode: 500, statusMessage: staffError.message });
+    if (!staff || staff.length === 0) throw createError({ statusCode: 500, statusMessage: 'Nessun personale configurato nel database.' });
+
+    const staffListForPrompt = staff.map(s => `ID: ${s.id}, Nome: ${s.name}, Competenze: ${s.responsibilities}`).join('\n');
+    const finalPrompt = PROMPT_EMAIL_TRIAGE.replace('{staff_list}', staffListForPrompt).replace('{email_subject}', subject).replace('{email_body}', body_text.substring(0, 3000));
+
+    let aiResponse;
+    try {
+        const rawResponse = await callGemini(finalPrompt);
+        aiResponse = JSON.parse(rawResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+    } catch (e) {
+        throw createError({ statusCode: 500, statusMessage: 'Errore durante l\'analisi AI dell\'email.' });
+    }
+    
+    const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
+        sender, subject, body_text, status: 'assigned',
+        assigned_to_staff_id: aiResponse.best_match_staff_id,
+        ai_confidence_score: aiResponse.confidence_score,
+        ai_reasoning: aiResponse.reasoning
+    }]).select().single();
+    
+    if (saveError) throw createError({ statusCode: 500, statusMessage: saveError.message });
+    
+    const assignedStaffMember = staff.find(s => s.id === aiResponse.best_match_staff_id);
+    console.log(`Email da ${sender} assegnata a ${assignedStaffMember?.name}`);
+    return { message: 'Email processata e assegnata con successo.', assignment: assignedStaffMember, emailRecord: savedEmail };
+});
+

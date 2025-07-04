@@ -1,0 +1,7 @@
+{
+  "$schema": "https://shadcn-vue.com/schema.json",
+  "style": "default",
+  "tailwind": { "config": "tailwind.config.ts", "css": "assets/css/main.css", "baseColor": "slate", "cssVariables": true },
+  "framework": "nuxt",
+  "aliases": { "components": "@/components", "utils": "@/lib/utils" }
+}
