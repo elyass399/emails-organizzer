@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ToastProvider, type ToastProviderProps } from 'reka-ui'
 
-const props = defineProps<ToastProviderProps>()
+const props = defineProps</* @vue-ignore */ ToastProviderProps>() // Aggiungi qui
 </script>
 
 <template>

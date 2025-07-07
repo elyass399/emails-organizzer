@@ -4,7 +4,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastDescription, type ToastDescriptionProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastDescriptionProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastDescriptionProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>

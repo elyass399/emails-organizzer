@@ -4,7 +4,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastViewport, type ToastViewportProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastViewportProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastViewportProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>

@@ -4,7 +4,7 @@ import { ToastRoot, type ToastRootEmits, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils'
 import { type ToastProps, toastVariants } from '.'
 
-const props = defineProps<ToastProps>()
+const props = defineProps</* @vue-ignore */ ToastProps>() // Aggiungi qui
 
 const emits = defineEmits<ToastRootEmits>()
 

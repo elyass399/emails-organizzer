@@ -5,9 +5,7 @@ import { X } from 'lucide-vue-next'
 import { ToastClose, type ToastCloseProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastCloseProps & {
-  class?: HTMLAttributes['class']
-}>()
+const props = defineProps</* @vue-ignore */ ToastCloseProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>

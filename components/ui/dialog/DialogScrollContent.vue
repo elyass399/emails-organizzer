@@ -4,20 +4,18 @@ import { reactiveOmit } from '@vueuse/core'
 import { X } from 'lucide-vue-next'
 import {
   DialogClose,
-  DialogContent,
+  DialogContent, // Questo viene da reka-ui qui!
   type DialogContentEmits,
-  type DialogContentProps,
-  DialogOverlay,
-  DialogPortal,
+  type DialogContentProps, // Questo viene da reka-ui qui!
+  DialogOverlay, // Questo viene da reka-ui qui!
+  DialogPortal, // Questo viene da reka-ui qui!
   useForwardPropsEmits,
 } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 const emits = defineEmits<DialogContentEmits>()
-
 const delegatedProps = reactiveOmit(props, 'class')
-
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
 
