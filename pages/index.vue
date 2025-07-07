@@ -1,45 +1,87 @@
 <!-- File: pages/index.vue -->
 <script setup>
-// NESSUN IMPORT DI COMPONENTI QUI. NUXT LI GESTIRÀ AUTOMATICAMENTE.
 import { ref, onMounted } from 'vue';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/toast/use-toast';
+import { Toaster } from '@/components/ui/toast';
 
-// --- STATO DELLA PAGINA (rimane invariato) ---
+// --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
-const unprocessedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true);
-const isProcessing = ref(false);
+const isLoading = ref(true); // Per la tabella della posta smistata
+const isProcessing = ref(false); // Per il modulo di invio
 
-// --- DATI DI ESEMPIO (rimangono invariati) ---
-const getSampleEmails = () => [
-  { id: 'sample-1', sender: 'cliente.tech@email.com', subject: 'Problema con login su App Mobile', body_text: 'Ciao, da stamattina non riesco più ad accedere all"applicazione mobile, continua a darmi "errore di autenticazione". Potete verificare? Grazie.' },
-  { id: 'sample-2', sender: 'fornitore.fiscale@email.com', subject: 'Richiesta documenti per dichiarazione IVA', body_text: 'Buongiorno, avremmo bisogno delle fatture di acquisto del terzo trimestre per procedere con la dichiarazione IVA. Potete inviarcele? Saluti, Studio Legale Tributario.' },
-  { id: 'sample-3', sender: 'info@eventifiera.com', subject: 'Invito a Fiera del Digitale 2024', body_text: 'Siamo lieti di invitarvi alla Fiera del Digitale che si terrà a Milano il prossimo mese. Sarebbe un"opportunità per presentare il vostro gestionale. Restiamo in attesa di un vostro gentile riscontro.' },
-];
+// --- DATI DEL MODULO ---
+const newEmail = ref({
+  sender: 'cliente.generico@email.com',
+  subject: 'Richiesta informazioni fattura',
+  body_text: 'Buongiorno, vorrei ricevere una copia della fattura n. 123 del mese scorso. Grazie.'
+});
 
-// --- FUNZIONI PRINCIPALI (rimangono invariate) ---
+// Toast per notifiche
+const { toast } = useToast();
+
+// --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
   isLoading.value = true;
   try {
     processedEmails.value = await $fetch('/api/inbox');
-  } catch (error) { console.error("Impossibile caricare la posta smistata:", error); }
-  finally { isLoading.value = false; }
+  } catch (error) {
+    console.error("Impossibile caricare la posta smistata:", error);
+    toast({
+      title: 'Errore',
+      description: 'Impossibile caricare lo storico delle email.',
+      variant: 'destructive',
+    });
+  } finally {
+    isLoading.value = false;
+  }
 };
 
-const processNextEmail = async () => {
-  if (unprocessedEmails.value.length === 0) return;
-  isProcessing.value = true;
-  const emailToProcess = unprocessedEmails.value[0];
-  try {
-    await $fetch('/api/emails/process', {
-      method: 'POST',
-      body: { sender: emailToProcess.sender, subject: emailToProcess.subject, body_text: emailToProcess.body_text },
+const processManualEmail = async () => {
+  if (!newEmail.value.sender || !newEmail.value.subject || !newEmail.value.body_text) {
+    toast({
+      title: 'Dati mancanti',
+      description: 'Compila tutti i campi per poter analizzare l\'email.',
+      variant: 'destructive',
     });
-    unprocessedEmails.value.shift();
+    return;
+  }
+
+  isProcessing.value = true;
+  try {
+    const result = await $fetch('/api/emails/process', {
+      method: 'POST',
+      body: newEmail.value,
+    });
+    
+    toast({
+      title: 'Successo!',
+      description: `Email assegnata a ${result.assignment?.name || 'N/D'}.`,
+    });
+
+    // Pulisce il modulo e ricarica la lista
+    newEmail.value = { sender: '', subject: '', body_text: '' };
     await fetchProcessedEmails();
-  } catch (error) { alert(`Si è verificato un errore: ${error.data?.message || error.message}`); }
-  finally { isProcessing.value = false; }
+
+  } catch (error) {
+    console.error("Errore durante l'analisi:", error);
+    toast({
+      title: 'Errore durante l\'analisi',
+      description: error.data?.message || 'Si è verificato un errore imprevisto.',
+      variant: 'destructive',
+    });
+  } finally {
+    isProcessing.value = false;
+  }
 };
 
 const viewEmailContent = (email) => {
@@ -47,54 +89,55 @@ const viewEmailContent = (email) => {
   showContentModal.value = true;
 };
 
-const resetSimulation = () => {
-  unprocessedEmails.value = getSampleEmails();
-  alert('Simulazione resettata.');
-};
-
-// --- FUNZIONI UTILI (rimangono invariate) ---
+// --- FUNZIONI UTILI ---
 const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
 const getConfidenceVariant = (score) => {
-  if (score === null) return 'secondary';
-  if (score >= 0.8) return 'default';
+  if (score === null || score === undefined) return 'secondary';
+  if (score >= 0.8) return 'default'; // Verde nel tema di default
   if (score >= 0.5) return 'secondary';
   return 'destructive';
 };
 
-// --- HOOK (rimane invariato) ---
+// --- HOOK ---
 onMounted(() => {
-  unprocessedEmails.value = getSampleEmails();
   fetchProcessedEmails();
 });
 </script>
 
 <template>
   <div class="container mx-auto p-4 md:p-8 space-y-8">
+    <!-- Componente per mostrare le notifiche -->
+    <Toaster />
+
+    <!-- Card per l'invio manuale -->
     <Card>
       <CardHeader>
-        <div class="flex justify-between items-center">
-          <div>
-            <CardTitle>Casella di Posta in Arrivo (Simulata)</CardTitle>
-            <CardDescription>Email "in attesa" di essere analizzate dall'AI.</CardDescription>
-          </div>
-          <Button @click="resetSimulation" variant="outline">Resetta Simulazione</Button>
-        </div>
+        <CardTitle>Test Manuale Analisi Email</CardTitle>
+        <CardDescription>Inserisci i dati di un'email per testare l'assegnazione da parte dell'AI.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ul v-if="unprocessedEmails.length > 0" class="space-y-2">
-          <li v-for="email in unprocessedEmails" :key="email.id" class="p-3 border rounded-md bg-muted/20">
-            <p class="font-medium">{{ email.subject }}</p>
-            <p class="text-sm text-muted-foreground">Da: {{ email.sender }}</p>
-          </li>
-        </ul>
-        <p v-else class="text-muted-foreground">Tutte le email sono state processate!</p>
-        <Button @click="processNextEmail" :disabled="isProcessing || unprocessedEmails.length === 0" class="w-full mt-4">
-          <span v-if="isProcessing">Analisi in corso...</span>
-          <span v-else>Processa Prossima Email ({{ unprocessedEmails.length }} Rimanenti)</span>
-        </Button>
+        <form @submit.prevent="processManualEmail" class="space-y-4">
+          <div class="space-y-2">
+            <Label for="sender">Mittente</Label>
+            <Input id="sender" v-model="newEmail.sender" placeholder="es. mario.rossi@email.com" />
+          </div>
+          <div class="space-y-2">
+            <Label for="subject">Oggetto</Label>
+            <Input id="subject" v-model="newEmail.subject" placeholder="es. Problema con fattura" />
+          </div>
+          <div class="space-y-2">
+            <Label for="body_text">Corpo del Messaggio</Label>
+            <Textarea id="body_text" v-model="newEmail.body_text" placeholder="Scrivi qui il testo dell'email..." class="min-h-32" />
+          </div>
+          <Button type="submit" :disabled="isProcessing" class="w-full">
+            <span v-if="isProcessing">Analisi in corso...</span>
+            <span v-else>Analizza e Smista Email</span>
+          </Button>
+        </form>
       </CardContent>
     </Card>
 
+    <!-- Card per la posta smistata -->
     <Card>
       <CardHeader>
         <CardTitle>Posta Smistata dall'AI</CardTitle>
@@ -124,7 +167,7 @@ onMounted(() => {
                 </TableCell>
                 <TableCell class="text-center">
                   <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
-                    {{ email.ai_confidence_score ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
+                    {{ email.ai_confidence_score !== null && email.ai_confidence_score !== undefined ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
@@ -139,6 +182,7 @@ onMounted(() => {
       </CardContent>
     </Card>
     
+    <!-- Modale per visualizzare contenuto email -->
     <Dialog :open="showContentModal" @update:open="showContentModal = false">
       <DialogContent v-if="selectedEmailContent">
           <DialogHeader>
@@ -149,7 +193,7 @@ onMounted(() => {
               {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
           </div>
           <DialogFooter>
-              <Button @click="showContentModal = false">Chiudi</Button>
+              <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
           </DialogFooter>
       </DialogContent>
     </Dialog>
