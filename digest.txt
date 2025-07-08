@@ -31,11 +31,13 @@ Directory structure:
     │       │   ├── DialogHeader.vue
     │       │   ├── DialogScrollContent.vue
     │       │   ├── DialogTitle.vue
-    │       │   └── DialogTrigger.vue
+    │       │   ├── DialogTrigger.vue
+    │       │   └── index.ts
     │       ├── input/
     │       │   ├── index.ts
     │       │   └── Input.vue
     │       ├── label/
+    │       │   ├── index.ts
     │       │   └── Label.vue
     │       ├── table/
     │       │   ├── index.ts
@@ -49,6 +51,7 @@ Directory structure:
     │       │   ├── TableHeader.vue
     │       │   └── TableRow.vue
     │       ├── textarea/
+    │       │   ├── index.ts
     │       │   └── Textarea.vue
     │       └── toast/
     │           ├── index.ts
@@ -261,6 +264,7 @@ FILE: package.json
     "lucide-vue-next": "^0.525.0",
     "nuxt": "^3.17.6",
     "radix-vue": "^1.9.17",
+    "reka-ui": "^2.3.2",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.11",
     "vue": "^3.5.17",
@@ -320,7 +324,7 @@ import type { HTMLAttributes } from 'vue'
 import { Primitive, type PrimitiveProps } from 'radix-vue'
 import { type ButtonVariants, buttonVariants } from '.'
 import { cn } from '@/lib/utils'
-interface Props extends PrimitiveProps { variant?: ButtonVariants['variant']; size?: ButtonVariants['size']; class?: HTMLAttributes['class'] }
+interface Props extends /* @vue-ignore */ PrimitiveProps { variant?: ButtonVariants['variant']; size?: ButtonVariants['size']; class?: HTMLAttributes['class'] }
 const props = withDefaults(defineProps<Props>(), { as: 'button' })
 </script>
 <template>
@@ -409,7 +413,7 @@ FILE: components/ui/dialog/Dialog.vue
 ================================================
 <script setup lang="ts">
 import { DialogRoot, type DialogRootEmits, type DialogRootProps, useForwardPropsEmits } from 'radix-vue'
-const props = defineProps<DialogRootProps>()
+const props = defineProps</* @vue-ignore */ DialogRootProps>() // Aggiungi qui
 const emits = defineEmits<DialogRootEmits>()
 const forwarded = useForwardPropsEmits(props, emits)
 </script>
@@ -422,7 +426,7 @@ FILE: components/ui/dialog/DialogClose.vue
 <script setup lang="ts">
 import { DialogClose, type DialogCloseProps } from 'reka-ui'
 
-const props = defineProps<DialogCloseProps>()
+const props = defineProps</* @vue-ignore */ DialogCloseProps>() // Aggiungi qui
 </script>
 
 <template>
@@ -441,7 +445,7 @@ import { type HTMLAttributes, computed } from 'vue'
 import { DialogClose, DialogContent, type DialogContentEmits, type DialogContentProps, DialogOverlay, DialogPortal, useForwardPropsEmits } from 'radix-vue'
 import { X } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
-const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 const emits = defineEmits<DialogContentEmits>()
 const delegatedProps = computed(() => { const { class: _, ...delegated } = props; return delegated })
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
@@ -467,7 +471,7 @@ FILE: components/ui/dialog/DialogDescription.vue
 import type { HTMLAttributes } from 'vue'
 import { DialogDescription, type DialogDescriptionProps } from 'radix-vue'
 import { cn } from '@/lib/utils'
-const props = defineProps<DialogDescriptionProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ DialogDescriptionProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 </script>
 <template><DialogDescription :class="cn('text-sm text-muted-foreground', props.class)" v-bind="props"><slot /></DialogDescription></template>
 
@@ -503,20 +507,18 @@ import { reactiveOmit } from '@vueuse/core'
 import { X } from 'lucide-vue-next'
 import {
   DialogClose,
-  DialogContent,
+  DialogContent, // Questo viene da reka-ui qui!
   type DialogContentEmits,
-  type DialogContentProps,
-  DialogOverlay,
-  DialogPortal,
+  type DialogContentProps, // Questo viene da reka-ui qui!
+  DialogOverlay, // Questo viene da reka-ui qui!
+  DialogPortal, // Questo viene da reka-ui qui!
   useForwardPropsEmits,
 } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<DialogContentProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 const emits = defineEmits<DialogContentEmits>()
-
 const delegatedProps = reactiveOmit(props, 'class')
-
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
 
@@ -563,7 +565,7 @@ FILE: components/ui/dialog/DialogTitle.vue
 import type { HTMLAttributes } from 'vue'
 import { DialogTitle, type DialogTitleProps } from 'radix-vue'
 import { cn } from '@/lib/utils'
-const props = defineProps<DialogTitleProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ DialogTitleProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 </script>
 <template><DialogTitle v-bind="props" :class="cn('text-lg font-semibold leading-none tracking-tight', props.class)"><slot /></DialogTitle></template>
 
@@ -573,9 +575,24 @@ FILE: components/ui/dialog/DialogTrigger.vue
 ================================================
 <script setup lang="ts">
 import { DialogTrigger, type DialogTriggerProps } from 'radix-vue'
-const props = defineProps<DialogTriggerProps>()
+const props = defineProps</* @vue-ignore */ DialogTriggerProps>() // Aggiungi qui
 </script>
 <template><DialogTrigger v-bind="props"><slot /></DialogTrigger></template>
+
+
+================================================
+FILE: components/ui/dialog/index.ts
+================================================
+// File: components/ui/dialog/index.ts
+export { default as Dialog } from './Dialog.vue'
+export { default as DialogClose } from './DialogClose.vue'
+export { default as DialogContent } from './DialogContent.vue'
+export { default as DialogDescription } from './DialogDescription.vue'
+export { default as DialogFooter } from './DialogFooter.vue'
+export { default as DialogHeader } from './DialogHeader.vue'
+export { default as DialogScrollContent } from './DialogScrollContent.vue'
+export { default as DialogTitle } from './DialogTitle.vue'
+export { default as DialogTrigger } from './DialogTrigger.vue'
 
 
 ================================================
@@ -600,13 +617,20 @@ const modelValue = useVModel(props, 'modelValue', emits, { passive: true, defaul
 
 
 ================================================
+FILE: components/ui/label/index.ts
+================================================
+// File: components/ui/label/index.ts
+export { default as Label } from './Label.vue'
+
+
+================================================
 FILE: components/ui/label/Label.vue
 ================================================
 <script setup lang="ts">
 import { type HTMLAttributes, type LabelHTMLAttributes } from 'vue'
 import { Label, type LabelProps } from 'radix-vue'
 import { cn } from '@/lib/utils'
-const props = defineProps<LabelProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ LabelProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 </script>
 <template><Label :class="cn('text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70', props.class)"><slot /></Label></template>
 
@@ -755,6 +779,13 @@ FILE: components/ui/table/TableRow.vue
 
 
 ================================================
+FILE: components/ui/textarea/index.ts
+================================================
+// File: components/ui/textarea/index.ts
+export { default as Textarea } from './Textarea.vue'
+
+
+================================================
 FILE: components/ui/textarea/Textarea.vue
 ================================================
 <script setup lang="ts">
@@ -785,6 +816,12 @@ export { default as ToastViewport } from './ToastViewport.vue'
 export { toast, useToast } from './use-toast'
 
 import { cva, type VariantProps } from 'class-variance-authority'
+
+export interface ToastProps extends /* @vue-ignore */ ToastRootProps {
+  class?: HTMLAttributes['class']
+  variant?: ToastVariants['variant']
+  onOpenChange?: ((value: boolean) => void) | undefined
+}
 
 export const toastVariants = cva(
   'group pointer-events-auto relative flex w-full items-center justify-between space-x-2 overflow-hidden rounded-md border p-4 pr-6 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--reka-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--reka-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full',
@@ -821,7 +858,7 @@ import { ToastRoot, type ToastRootEmits, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils'
 import { type ToastProps, toastVariants } from '.'
 
-const props = defineProps<ToastProps>()
+const props = defineProps</* @vue-ignore */ ToastProps>() // Aggiungi qui
 
 const emits = defineEmits<ToastRootEmits>()
 
@@ -851,7 +888,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastAction, type ToastActionProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastActionProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastActionProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -874,9 +911,7 @@ import { X } from 'lucide-vue-next'
 import { ToastClose, type ToastCloseProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastCloseProps & {
-  class?: HTMLAttributes['class']
-}>()
+const props = defineProps</* @vue-ignore */ ToastCloseProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -898,7 +933,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastDescription, type ToastDescriptionProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastDescriptionProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastDescriptionProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -953,7 +988,7 @@ FILE: components/ui/toast/ToastProvider.vue
 <script setup lang="ts">
 import { ToastProvider, type ToastProviderProps } from 'reka-ui'
 
-const props = defineProps<ToastProviderProps>()
+const props = defineProps</* @vue-ignore */ ToastProviderProps>() // Aggiungi qui
 </script>
 
 <template>
@@ -973,7 +1008,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastTitle, type ToastTitleProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastTitleProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastTitleProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -995,7 +1030,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastViewport, type ToastViewportProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps<ToastViewportProps & { class?: HTMLAttributes['class'] }>()
+const props = defineProps</* @vue-ignore */ ToastViewportProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -1190,46 +1225,88 @@ FILE: pages/index.vue
 ================================================
 <!-- File: pages/index.vue -->
 <script setup>
-// NESSUN IMPORT DI COMPONENTI QUI. NUXT LI GESTIRÃ€ AUTOMATICAMENTE.
 import { ref, onMounted } from 'vue';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/toast/use-toast';
+import { Toaster } from '@/components/ui/toast';
 
-// --- STATO DELLA PAGINA (rimane invariato) ---
+// --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
-const unprocessedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true);
-const isProcessing = ref(false);
+const isLoading = ref(true); // Per la tabella della posta smistata
+const isProcessing = ref(false); // Per il modulo di invio
 
-// --- DATI DI ESEMPIO (rimangono invariati) ---
-const getSampleEmails = () => [
-  { id: 'sample-1', sender: 'cliente.tech@email.com', subject: 'Problema con login su App Mobile', body_text: 'Ciao, da stamattina non riesco piÃ¹ ad accedere all"applicazione mobile, continua a darmi "errore di autenticazione". Potete verificare? Grazie.' },
-  { id: 'sample-2', sender: 'fornitore.fiscale@email.com', subject: 'Richiesta documenti per dichiarazione IVA', body_text: 'Buongiorno, avremmo bisogno delle fatture di acquisto del terzo trimestre per procedere con la dichiarazione IVA. Potete inviarcele? Saluti, Studio Legale Tributario.' },
-  { id: 'sample-3', sender: 'info@eventifiera.com', subject: 'Invito a Fiera del Digitale 2024', body_text: 'Siamo lieti di invitarvi alla Fiera del Digitale che si terrÃ  a Milano il prossimo mese. Sarebbe un"opportunitÃ  per presentare il vostro gestionale. Restiamo in attesa di un vostro gentile riscontro.' },
-];
+// --- DATI DEL MODULO ---
+const newEmail = ref({
+  sender: 'cliente.generico@email.com',
+  subject: 'Richiesta informazioni fattura',
+  body_text: 'Buongiorno, vorrei ricevere una copia della fattura n. 123 del mese scorso. Grazie.'
+});
 
-// --- FUNZIONI PRINCIPALI (rimangono invariate) ---
+// Toast per notifiche
+const { toast } = useToast();
+
+// --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
   isLoading.value = true;
   try {
     processedEmails.value = await $fetch('/api/inbox');
-  } catch (error) { console.error("Impossibile caricare la posta smistata:", error); }
-  finally { isLoading.value = false; }
+  } catch (error) {
+    console.error("Impossibile caricare la posta smistata:", error);
+    toast({
+      title: 'Errore',
+      description: 'Impossibile caricare lo storico delle email.',
+      variant: 'destructive',
+    });
+  } finally {
+    isLoading.value = false;
+  }
 };
 
-const processNextEmail = async () => {
-  if (unprocessedEmails.value.length === 0) return;
-  isProcessing.value = true;
-  const emailToProcess = unprocessedEmails.value[0];
-  try {
-    await $fetch('/api/emails/process', {
-      method: 'POST',
-      body: { sender: emailToProcess.sender, subject: emailToProcess.subject, body_text: emailToProcess.body_text },
+const processManualEmail = async () => {
+  if (!newEmail.value.sender || !newEmail.value.subject || !newEmail.value.body_text) {
+    toast({
+      title: 'Dati mancanti',
+      description: 'Compila tutti i campi per poter analizzare l\'email.',
+      variant: 'destructive',
     });
-    unprocessedEmails.value.shift();
+    return;
+  }
+
+  isProcessing.value = true;
+  try {
+    const result = await $fetch('/api/emails/process', {
+      method: 'POST',
+      body: newEmail.value,
+    });
+    
+    toast({
+      title: 'Successo!',
+      description: `Email assegnata a ${result.assignment?.name || 'N/D'}.`,
+    });
+
+    // Pulisce il modulo e ricarica la lista
+    newEmail.value = { sender: '', subject: '', body_text: '' };
     await fetchProcessedEmails();
-  } catch (error) { alert(`Si Ã¨ verificato un errore: ${error.data?.message || error.message}`); }
-  finally { isProcessing.value = false; }
+
+  } catch (error) {
+    console.error("Errore durante l'analisi:", error);
+    toast({
+      title: 'Errore durante l\'analisi',
+      description: error.data?.message || 'Si Ã¨ verificato un errore imprevisto.',
+      variant: 'destructive',
+    });
+  } finally {
+    isProcessing.value = false;
+  }
 };
 
 const viewEmailContent = (email) => {
@@ -1237,54 +1314,55 @@ const viewEmailContent = (email) => {
   showContentModal.value = true;
 };
 
-const resetSimulation = () => {
-  unprocessedEmails.value = getSampleEmails();
-  alert('Simulazione resettata.');
-};
-
-// --- FUNZIONI UTILI (rimangono invariate) ---
+// --- FUNZIONI UTILI ---
 const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
 const getConfidenceVariant = (score) => {
-  if (score === null) return 'secondary';
-  if (score >= 0.8) return 'default';
+  if (score === null || score === undefined) return 'secondary';
+  if (score >= 0.8) return 'default'; // Verde nel tema di default
   if (score >= 0.5) return 'secondary';
   return 'destructive';
 };
 
-// --- HOOK (rimane invariato) ---
+// --- HOOK ---
 onMounted(() => {
-  unprocessedEmails.value = getSampleEmails();
   fetchProcessedEmails();
 });
 </script>
 
 <template>
   <div class="container mx-auto p-4 md:p-8 space-y-8">
+    <!-- Componente per mostrare le notifiche -->
+    <Toaster />
+
+    <!-- Card per l'invio manuale -->
     <Card>
       <CardHeader>
-        <div class="flex justify-between items-center">
-          <div>
-            <CardTitle>Casella di Posta in Arrivo (Simulata)</CardTitle>
-            <CardDescription>Email "in attesa" di essere analizzate dall'AI.</CardDescription>
-          </div>
-          <Button @click="resetSimulation" variant="outline">Resetta Simulazione</Button>
-        </div>
+        <CardTitle>Test Manuale Analisi Email</CardTitle>
+        <CardDescription>Inserisci i dati di un'email per testare l'assegnazione da parte dell'AI.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ul v-if="unprocessedEmails.length > 0" class="space-y-2">
-          <li v-for="email in unprocessedEmails" :key="email.id" class="p-3 border rounded-md bg-muted/20">
-            <p class="font-medium">{{ email.subject }}</p>
-            <p class="text-sm text-muted-foreground">Da: {{ email.sender }}</p>
-          </li>
-        </ul>
-        <p v-else class="text-muted-foreground">Tutte le email sono state processate!</p>
-        <Button @click="processNextEmail" :disabled="isProcessing || unprocessedEmails.length === 0" class="w-full mt-4">
-          <span v-if="isProcessing">Analisi in corso...</span>
-          <span v-else>Processa Prossima Email ({{ unprocessedEmails.length }} Rimanenti)</span>
-        </Button>
+        <form @submit.prevent="processManualEmail" class="space-y-4">
+          <div class="space-y-2">
+            <Label for="sender">Mittente</Label>
+            <Input id="sender" v-model="newEmail.sender" placeholder="es. mario.rossi@email.com" />
+          </div>
+          <div class="space-y-2">
+            <Label for="subject">Oggetto</Label>
+            <Input id="subject" v-model="newEmail.subject" placeholder="es. Problema con fattura" />
+          </div>
+          <div class="space-y-2">
+            <Label for="body_text">Corpo del Messaggio</Label>
+            <Textarea id="body_text" v-model="newEmail.body_text" placeholder="Scrivi qui il testo dell'email..." class="min-h-32" />
+          </div>
+          <Button type="submit" :disabled="isProcessing" class="w-full">
+            <span v-if="isProcessing">Analisi in corso...</span>
+            <span v-else>Analizza e Smista Email</span>
+          </Button>
+        </form>
       </CardContent>
     </Card>
 
+    <!-- Card per la posta smistata -->
     <Card>
       <CardHeader>
         <CardTitle>Posta Smistata dall'AI</CardTitle>
@@ -1314,7 +1392,7 @@ onMounted(() => {
                 </TableCell>
                 <TableCell class="text-center">
                   <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
-                    {{ email.ai_confidence_score ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
+                    {{ email.ai_confidence_score !== null && email.ai_confidence_score !== undefined ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
@@ -1329,6 +1407,7 @@ onMounted(() => {
       </CardContent>
     </Card>
     
+    <!-- Modale per visualizzare contenuto email -->
     <Dialog :open="showContentModal" @update:open="showContentModal = false">
       <DialogContent v-if="selectedEmailContent">
           <DialogHeader>
@@ -1339,7 +1418,7 @@ onMounted(() => {
               {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
           </div>
           <DialogFooter>
-              <Button @click="showContentModal = false">Chiudi</Button>
+              <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
           </DialogFooter>
       </DialogContent>
     </Dialog>
