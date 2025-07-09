@@ -1,4 +1,4 @@
-<!-- File: pages/index.vue -->
+<!-- File: pages/index.vue (con nuovo styling) -->
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Button } from '@/components/ui/button';
@@ -56,12 +56,10 @@ const getConfidenceVariant = (score) => {
 // --- HOOK DEL CICLO DI VITA ---
 onMounted(() => {
   fetchProcessedEmails();
-  // Aggiorniamo la lista ogni 30 secondi
   refreshInterval = setInterval(fetchProcessedEmails, 30000);
 });
 
 onUnmounted(() => {
-  // Puliamo l'intervallo quando l'utente lascia la pagina per evitare problemi
   if (refreshInterval) {
     clearInterval(refreshInterval);
   }
@@ -69,59 +67,58 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="bg-gray-50 min-h-screen">
+  <div class="bg-slate-50 min-h-screen">
     <div class="container mx-auto p-4 sm:p-6 lg:p-8">
       <!-- Componente per mostrare le notifiche (toast) -->
       <Toaster />
 
       <!-- Card principale per la posta smistata -->
-      <Card class="w-full max-w-7xl mx-auto shadow-sm">
-        <CardHeader>
-          <CardTitle class="text-2xl font-bold tracking-tight">Posta in Arrivo Smistata</CardTitle>
+      <Card class="w-full max-w-7xl mx-auto shadow-sm border border-slate-200">
+        <CardHeader class="border-b border-slate-200">
+          <CardTitle class="text-2xl font-bold tracking-tight text-slate-800">Posta in Arrivo Smistata</CardTitle>
           <CardDescription>
-            Elenco delle email analizzate dall'AI e assegnate a un responsabile. La lista si aggiorna automaticamente.
+            Elenco delle email analizzate dall'AI. La lista si aggiorna automaticamente.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent class="p-0"> <!-- Rimuoviamo il padding qui per dare il pieno controllo alla tabella -->
           <!-- Stato di caricamento iniziale -->
-          <div v-if="isLoading" class="flex flex-col items-center justify-center text-center py-24 text-gray-500">
+          <div v-if="isLoading" class="flex flex-col items-center justify-center text-center py-24 text-slate-500">
             <LoaderCircle class="h-8 w-8 animate-spin mb-4" />
             <p class="font-medium">Caricamento storico email...</p>
-            <p class="text-sm">Potrebbe richiedere qualche istante.</p>
           </div>
 
           <!-- Tabella con le email -->
           <div v-else-if="processedEmails.length > 0">
             <Table>
-              <TableHeader>
+              <TableHeader class="bg-slate-100">
                 <TableRow>
-                  <TableHead class="w-[35%]">Mittente & Oggetto</TableHead>
-                  <TableHead>Assegnato A</TableHead>
-                  <TableHead class="text-center">Confidenza AI</TableHead>
-                  <TableHead class="text-right">Data Ricezione</TableHead>
-                  <TableHead class="text-center w-[120px]">Azione</TableHead>
+                  <TableHead class="w-[35%] font-semibold text-slate-700">Mittente & Oggetto</TableHead>
+                  <TableHead class="font-semibold text-slate-700">Assegnato A</TableHead>
+                  <TableHead class="text-center font-semibold text-slate-700">Confidenza AI</TableHead>
+                  <TableHead class="text-right font-semibold text-slate-700">Data Ricezione</TableHead>
+                  <TableHead class="text-center w-[120px] font-semibold text-slate-700">Azione</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                <TableRow v-for="email in processedEmails" :key="email.id">
-                  <TableCell class="font-medium">
-                    <div class="truncate" :title="email.sender">{{ email.sender }}</div>
-                    <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">
+                <TableRow v-for="email in processedEmails" :key="email.id" class="hover:bg-slate-50">
+                  <TableCell class="p-4 align-top">
+                    <div class="font-medium text-slate-800 truncate" :title="email.sender">{{ email.sender }}</div>
+                    <div class="text-sm text-slate-500 truncate max-w-xs" :title="email.subject">
                       {{ email.subject }}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell class="p-4 align-middle">
                     <Badge variant="outline">{{ email.staff?.name || 'Non Assegnato' }}</Badge>
                   </TableCell>
-                  <TableCell class="text-center">
+                  <TableCell class="p-4 text-center align-middle">
                     <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
                       {{ email.ai_confidence_score !== null ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
                     </Badge>
                   </TableCell>
-                  <TableCell class="text-right text-xs text-muted-foreground">{{ formatDate(email.created_at) }}</TableCell>
-                  <TableCell class="text-center">
+                  <TableCell class="p-4 text-right text-sm text-slate-500 align-middle">{{ formatDate(email.created_at) }}</TableCell>
+                  <TableCell class="p-4 text-center align-middle">
                      <Button @click="viewEmailContent(email)" variant="ghost" size="icon">
-                       <Eye class="h-4 w-4" />
+                       <Eye class="h-4 w-4 text-slate-600" />
                        <span class="sr-only">Visualizza Email</span>
                      </Button>
                   </TableCell>
@@ -131,10 +128,10 @@ onUnmounted(() => {
           </div>
 
           <!-- Stato vuoto, quando non ci sono email -->
-          <div v-else class="flex flex-col items-center justify-center text-center py-24 text-gray-400 border-2 border-dashed rounded-lg">
-            <Inbox class="h-12 w-12 mb-4" />
-            <p class="font-semibold text-lg text-gray-600">La tua casella di posta è vuota.</p>
-            <p class="text-sm">Le nuove email ricevute all'indirizzo di smistamento appariranno qui.</p>
+          <div v-else class="flex flex-col items-center justify-center text-center p-16 text-slate-500 border-t border-slate-200">
+            <Inbox class="h-12 w-12 mb-4 text-slate-400" />
+            <p class="font-semibold text-lg text-slate-700">La tua casella di posta è vuota.</p>
+            <p class="text-sm">Le nuove email processate appariranno qui.</p>
           </div>
         </CardContent>
       </Card>
@@ -159,11 +156,3 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
-
-<style>
-/* Abbiamo spostato lo sfondo principale qui per un controllo più granulare,
-   sebbene quello in app.vue funzioni ancora come fallback. */
-body {
-  background-color: #f9fafb; /* Un grigio molto chiaro, quasi bianco */
-}
-</style>
