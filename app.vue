@@ -20,8 +20,8 @@ body {
 /* Stili per il tema scuro (opzionale, ma buona pratica) */
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #121212; /* Un grigio scuro */
-    color: #e0e0e0; /* Un bianco sporco */
+    background-color: #f9f6f6; /* Un grigio scuro */
+    color: #060000; /* Un bianco sporco */
   }
 }
 </style>

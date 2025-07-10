@@ -1,36 +1,56 @@
-<!-- File: pages/index.vue (con nuovo styling) -->
+<!-- File: pages/index.vue -->
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Aggiungi 'computed'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+// Rimosso: import { Input } from '@/components/ui/input';
+// Rimosso: import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+// Rimosso: import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
-
-// Importiamo le icone per un look più pulito
-import { Eye, Inbox, LoaderCircle } from 'lucide-vue-next';
 
 // --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true);
-let refreshInterval = null;
+const isLoading = ref(true); // Per la tabella della posta smistata
+// Rimosso: const isProcessing = ref(false); // Per il modulo di invio
 
+// NUOVO: Stato per il filtro attivo
+const activeFilter = ref('all'); // Può essere 'all', 'new', 'analyzed', 'forwarded', etc.
+
+// --- DATI DEL MODULO ---
+// Rimosso: const newEmail = ref({...}); // Non più necessario
+
+// Toast per notifiche
 const { toast } = useToast();
 
-// --- FUNZIONI API ---
+// NUOVO: Computed property per le email filtrate
+const filteredEmails = computed(() => {
+  if (activeFilter.value === 'all') {
+    return processedEmails.value;
+  }
+  // Filtra per stato singolo o per gruppo di stati "Problemi"
+  if (activeFilter.value === 'problems') {
+    return processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status));
+  }
+  return processedEmails.value.filter(email => email.status === activeFilter.value);
+});
+
+
+// --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
+  isLoading.value = true;
   try {
-    const data = await $fetch('/api/inbox');
-    processedEmails.value = data;
+    processedEmails.value = await $fetch('/api/inbox');
   } catch (error) {
     console.error("Impossibile caricare la posta smistata:", error);
     toast({
-      title: 'Errore di Caricamento',
-      description: 'Non è stato possibile aggiornare la lista delle email.',
+      title: 'Errore',
+      description: 'Impossibile caricare lo storico delle email.',
       variant: 'destructive',
     });
   } finally {
@@ -38,121 +58,175 @@ const fetchProcessedEmails = async () => {
   }
 };
 
+// Rimosso: const processManualEmail = async () => {...}; // Non più necessario
+
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
   showContentModal.value = true;
 };
 
-// --- FUNZIONI UTILI PER LA VISUALIZZAZIONE ---
-const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// --- NUOVE FUNZIONI UTILI PER LA GRAFICA ---
+const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
 
 const getConfidenceVariant = (score) => {
-  if (score === null || score === undefined) return 'secondary';
-  if (score >= 0.8) return 'default'; // Verde nel tema di default
-  if (score >= 0.5) return 'secondary';
-  return 'destructive';
+  if (score === null || score === undefined) return 'secondary'; // Grigio
+  if (score >= 0.8) return 'default'; // Verde (Successo)
+  if (score >= 0.5) return 'secondary'; // Giallo/Grigio (Mediocre)
+  return 'destructive'; // Rosso (Basso/Fallimento)
 };
 
-// --- HOOK DEL CICLO DI VITA ---
+const getStatusVariant = (status) => {
+  switch (status) {
+    case 'new': return 'secondary'; // Nuovo (grigio chiaro)
+    case 'analyzed': return 'outline'; // Analizzato (contorno)
+    case 'forwarded': return 'default'; // Inoltrato (verde principale)
+    case 'manual_review': return 'destructive'; // Richiede Revisione (rosso)
+    case 'ai_error': return 'destructive'; // Errore AI (rosso)
+    case 'forward_error': return 'destructive'; // Errore Inoltro (rosso)
+    default: return 'secondary'; // Default
+  }
+};
+
+const getStatusLabel = (status) => {
+  switch (status) {
+    case 'new': return 'Nuova';
+    case 'analyzed': return 'Analizzata';
+    case 'forwarded': return 'Inoltrata';
+    case 'manual_review': return 'Revisione Manuale';
+    case 'ai_error': return 'Errore AI';
+    case 'forward_error': return 'Errore Inoltro';
+    default: return status; // Se lo stato è sconosciuto, mostra il testo originale
+  }
+};
+
+// --- HOOK ---
 onMounted(() => {
   fetchProcessedEmails();
-  refreshInterval = setInterval(fetchProcessedEmails, 30000);
-});
-
-onUnmounted(() => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval);
-  }
 });
 </script>
 
 <template>
-  <div class="bg-slate-50 min-h-screen">
-    <div class="container mx-auto p-4 sm:p-6 lg:p-8">
-      <!-- Componente per mostrare le notifiche (toast) -->
-      <Toaster />
+  <div class="container mx-auto p-4 md:p-8 space-y-8">
+    <!-- Componente per mostrare le notifiche -->
+    <Toaster />
 
-      <!-- Card principale per la posta smistata -->
-      <Card class="w-full max-w-7xl mx-auto shadow-sm border border-slate-200">
-        <CardHeader class="border-b border-slate-200">
-          <CardTitle class="text-2xl font-bold tracking-tight text-slate-800">Posta in Arrivo Smistata</CardTitle>
-          <CardDescription>
-            Elenco delle email analizzate dall'AI. La lista si aggiorna automaticamente.
-          </CardDescription>
-        </CardHeader>
-        <CardContent class="p-0"> <!-- Rimuoviamo il padding qui per dare il pieno controllo alla tabella -->
-          <!-- Stato di caricamento iniziale -->
-          <div v-if="isLoading" class="flex flex-col items-center justify-center text-center py-24 text-slate-500">
-            <LoaderCircle class="h-8 w-8 animate-spin mb-4" />
-            <p class="font-medium">Caricamento storico email...</p>
-          </div>
+    <!-- Rimosso: Card per l'invio manuale -->
+    <!-- Qui era presente la Card per il test manuale -->
 
-          <!-- Tabella con le email -->
-          <div v-else-if="processedEmails.length > 0">
-            <Table>
-              <TableHeader class="bg-slate-100">
-                <TableRow>
-                  <TableHead class="w-[35%] font-semibold text-slate-700">Mittente & Oggetto</TableHead>
-                  <TableHead class="font-semibold text-slate-700">Assegnato A</TableHead>
-                  <TableHead class="text-center font-semibold text-slate-700">Confidenza AI</TableHead>
-                  <TableHead class="text-right font-semibold text-slate-700">Data Ricezione</TableHead>
-                  <TableHead class="text-center w-[120px] font-semibold text-slate-700">Azione</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow v-for="email in processedEmails" :key="email.id" class="hover:bg-slate-50">
-                  <TableCell class="p-4 align-top">
-                    <div class="font-medium text-slate-800 truncate" :title="email.sender">{{ email.sender }}</div>
-                    <div class="text-sm text-slate-500 truncate max-w-xs" :title="email.subject">
-                      {{ email.subject }}
-                    </div>
-                  </TableCell>
-                  <TableCell class="p-4 align-middle">
-                    <Badge variant="outline">{{ email.staff?.name || 'Non Assegnato' }}</Badge>
-                  </TableCell>
-                  <TableCell class="p-4 text-center align-middle">
-                    <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
-                      {{ email.ai_confidence_score !== null ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
-                    </Badge>
-                  </TableCell>
-                  <TableCell class="p-4 text-right text-sm text-slate-500 align-middle">{{ formatDate(email.created_at) }}</TableCell>
-                  <TableCell class="p-4 text-center align-middle">
-                     <Button @click="viewEmailContent(email)" variant="ghost" size="icon">
-                       <Eye class="h-4 w-4 text-slate-600" />
-                       <span class="sr-only">Visualizza Email</span>
-                     </Button>
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+    <!-- Card per la posta smistata -->
+    <Card>
+      <CardHeader>
+        <CardTitle>Posta Smistata dall'AI</CardTitle>
+        <CardDescription>Elenco delle email analizzate e assegnate a un dipartimento/responsabile.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <!-- NUOVO: Filtri e pulsante Aggiorna -->
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4 mb-4">
+          <div class="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'all' }"
+              @click="activeFilter = 'all'"
+            >
+              Tutti ({{ processedEmails.length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'new' }"
+              @click="activeFilter = 'new'"
+            >
+              Nuove ({{ processedEmails.filter(e => e.status === 'new').length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'forwarded' }"
+              @click="activeFilter = 'forwarded'"
+            >
+              Inoltrate ({{ processedEmails.filter(e => e.status === 'forwarded').length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-destructive': activeFilter === 'problems' }"
+              @click="activeFilter = 'problems'"
+            >
+              Problemi ({{ processedEmails.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length }})
+            </Button>
           </div>
+          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
+            <!-- Icona Aggiorna (Refresh) -->
+            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 9V4m0 0l2.5-2.5M4 4l-2.5 2.5m1.5 8h-1.5m0 0v-5h-.582m15.356 2A8.001 8.001 0 0120 15v5m0 0l-2.5 2.5m2.5-2.5l2.5-2.5"></path>
+            </svg>
+            Aggiorna
+          </Button>
+        </div>
 
-          <!-- Stato vuoto, quando non ci sono email -->
-          <div v-else class="flex flex-col items-center justify-center text-center p-16 text-slate-500 border-t border-slate-200">
-            <Inbox class="h-12 w-12 mb-4 text-slate-400" />
-            <p class="font-semibold text-lg text-slate-700">La tua casella di posta è vuota.</p>
-            <p class="text-sm">Le nuove email processate appariranno qui.</p>
+        <div v-if="isLoading" class="text-center py-16"><p>Caricamento storico...</p></div>
+        <div v-else-if="filteredEmails.length > 0"> <!-- MODIFICA: USA filteredEmails -->
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mittente & Oggetto</TableHead>
+                <TableHead>Etichetta (Assegnato A)</TableHead>
+                <TableHead class="text-center">Confidenza AI</TableHead>
+                <TableHead class="text-center">Stato</TableHead> <!-- NUOVA COLONNA PER LO STATO -->
+                <TableHead class="text-right">Ricevuta il</TableHead>
+                <TableHead class="text-center">Contenuto</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="email in filteredEmails" :key="email.id"> <!-- MODIFICA: USA filteredEmails -->
+                <TableCell class="font-medium">
+                  <div>{{ email.sender }}</div>
+                  <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+                </TableCell>
+                <TableCell>
+                  <!-- Badge per Assegnato A - se staff.name è vuoto, usa un badge 'Non Assegnato' -->
+                  <Badge :variant="email.staff?.name ? 'outline' : 'secondary'">
+                    {{ email.staff?.name || 'Non Assegnato' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-center">
+                  <!-- Badge per Confidenza AI con colori diversi -->
+                  <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
+                    {{ email.ai_confidence_score !== null && email.ai_confidence_score !== undefined ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-center"> <!-- NUOVA CELLA PER LO STATO -->
+                  <Badge :variant="getStatusVariant(email.status)">
+                    {{ getStatusLabel(email.status) }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
+                <TableCell class="text-center">
+                   <Button @click="viewEmailContent(email)" variant="ghost" size="sm">Visualizza</Button>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-else class="text-center py-16"><p class="text-muted-foreground">Nessuna email trovata per il filtro selezionato.</p></div>
+      </CardContent>
+    </Card>
+    
+    <!-- Modale per visualizzare contenuto email -->
+    <Dialog :open="showContentModal" @update:open="showContentModal = false">
+      <DialogContent v-if="selectedEmailContent">
+          <DialogHeader>
+              <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
+              <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
+          </DialogHeader>
+          <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
+              {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
           </div>
-        </CardContent>
-      </Card>
-      
-      <!-- Modale per visualizzare il contenuto completo dell'email -->
-      <Dialog :open="showContentModal" @update:open="showContentModal = false">
-        <DialogContent v-if="selectedEmailContent" class="sm:max-w-2xl">
-            <DialogHeader>
-                <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
-                <DialogDescription>
-                  Da: {{ selectedEmailContent.sender }} • Ricevuta il: {{ formatDate(selectedEmailContent.created_at) }}
-                </DialogDescription>
-            </DialogHeader>
-            <div class="py-4 whitespace-pre-wrap text-sm max-h-[60vh] overflow-y-auto border-t border-b">
-                {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
-            </div>
-            <DialogFooter>
-                <Button @click="showContentModal = false" variant="secondary">Chiudi</Button>
-            </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+          <DialogFooter>
+              <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
+          </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
