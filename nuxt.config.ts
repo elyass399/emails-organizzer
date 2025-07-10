@@ -25,9 +25,16 @@ export default defineNuxtConfig({
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     sendgridApiKey: process.env.SENDGRID_API_KEY, 
     senderEmail: process.env.SENDER_EMAIL,
+    imapHost: process.env.IMAP_HOST,
+    imapPort: parseInt(process.env.IMAP_PORT || '993'),
+    imapUsername: process.env.IMAP_USERNAME,
+    imapPassword: process.env.IMAP_PASSWORD,
+    imapMailbox: process.env.IMAP_MAILBOX || 'INBOX',
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
     }
   },
+
+
 })

@@ -1,79 +1,108 @@
 // File: server/api/emails/process.post.js
 
-import { defineEventHandler, readBody, createError } from 'h3';
-import { serverSupabaseClient } from '#supabase/server';
-import { useRuntimeConfig } from '#imports';
-import { $fetch } from 'ofetch';
-
-const config = useRuntimeConfig();
-const GOOGLE_API_KEY = config.googleApiKey;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
-
-const PROMPT_EMAIL_TRIAGE = `
-Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito è analizzare un'email in arrivo e assegnarla al dipartimento o alla persona più appropriata.
-
-Ecco la lista del personale e delle loro responsabilità:
---- LISTA PERSONALE ---
-{staff_list}
------------------------
-
-Analizza il seguente contenuto dell'email (oggetto e corpo) e determina quale persona/dipartimento è il più adatto a gestirla.
-
---- CONTENUTO EMAIL ---
-Oggetto: {email_subject}
-Corpo: {email_body}
------------------------
-
-La tua risposta DEVE essere un oggetto JSON con il seguente formato, senza alcun testo aggiuntivo:
-{
-  "best_match_staff_id": "l'UUID del dipendente/dipartimento scelto dalla lista",
-  "confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
-  "reasoning": "Una breve frase che spiega perché hai scelto quel dipartimento. Esempio: 'L'email menziona problemi di accesso al software, che è di competenza del Supporto Tecnico.'"
-}
-
-Se NESSUNO sembra appropriato, rispondi con l'ID della "Segreteria Generale" o del dipartimento di default e un confidence_score basso.
-`;
-
-async function callGemini(prompt) {
-    const response = await $fetch.raw(GEMINI_API_URL, {
-        method: 'POST', body: { contents: [{ parts: [{ text: prompt }] }] }
-    });
-    const responseData = response._data;
-    if (!responseData.candidates?.[0]) throw new Error('Risposta non valida da Gemini');
-    return responseData.candidates[0].content.parts[0].text;
-}
+import { defineEventHandler, readBody, createError, setResponseStatus } from 'h3';
+import { serverSupabaseClient } from '#supabase/server'; // Per accedere al client Supabase (con chiave anonima)
+import { analyzeEmailWithAI } from '../../utils/aiService'; // Funzione centralizzata per l'analisi AI
+import { sendEmail } from '../../utils/emailSender';     // Funzione centralizzata per l'invio email
 
 export default defineEventHandler(async (event) => {
-    const supabase = await serverSupabaseClient(event);
-    const body = await readBody(event);
-    const { sender, subject, body_text } = body;
-    if (!subject || !body_text) throw createError({ statusCode: 400, statusMessage: 'Oggetto o corpo email mancanti.' });
+  const supabase = await serverSupabaseClient(event); // Client Supabase per operazioni DB
+  const body = await readBody(event);
+  const { sender, subject, body_text } = body;
 
-    const { data: staff, error: staffError } = await supabase.from('staff').select('id, name, responsibilities');
-    if (staffError) throw createError({ statusCode: 500, statusMessage: staffError.message });
-    if (!staff || staff.length === 0) throw createError({ statusCode: 500, statusMessage: 'Nessun personale configurato nel database.' });
+  if (!sender || !subject || !body_text) {
+    throw createError({ statusCode: 400, statusMessage: 'Mittente, oggetto o corpo email mancanti.' });
+  }
 
-    const staffListForPrompt = staff.map(s => `ID: ${s.id}, Nome: ${s.name}, Competenze: ${s.responsibilities}`).join('\n');
-    const finalPrompt = PROMPT_EMAIL_TRIAGE.replace('{staff_list}', staffListForPrompt).replace('{email_subject}', subject).replace('{email_body}', body_text.substring(0, 3000));
+  let emailRecordId = null; // ID dell'email nel DB, per aggiornamenti successivi
 
-    let aiResponse;
-    try {
-        const rawResponse = await callGemini(finalPrompt);
-        aiResponse = JSON.parse(rawResponse.replace(/```json/g, '').replace(/```/g, '').trim());
-    } catch (e) {
-        throw createError({ statusCode: 500, statusMessage: 'Errore durante l\'analisi AI dell\'email.' });
-    }
-    
+  try {
+    // 1. Salva l'email nel database con stato 'new'
     const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
-        sender, subject, body_text, status: 'assigned',
-        assigned_to_staff_id: aiResponse.best_match_staff_id,
-        ai_confidence_score: aiResponse.confidence_score,
-        ai_reasoning: aiResponse.reasoning
+        sender: sender,
+        subject: subject,
+        body_text: body_text,
+        // body_html: null, // Non abbiamo HTML dal form manuale, quindi null
+        status: 'new',
     }]).select().single();
+
+    if (saveError) {
+        console.error('API Supabase save error (process.post):', saveError.message);
+        throw createError({ statusCode: 500, statusMessage: `Errore durante il salvataggio dell'email: ${saveError.message}` });
+    }
+    emailRecordId = savedEmail.id;
+    console.log(`Manual email saved to DB with ID: ${emailRecordId}`);
+
+    // 2. Analisi AI
+    const aiResult = await analyzeEmailWithAI(sender, subject, body_text);
     
-    if (saveError) throw createError({ statusCode: 500, statusMessage: saveError.message });
-    
-    const assignedStaffMember = staff.find(s => s.id === aiResponse.best_match_staff_id);
-    console.log(`Email da ${sender} assegnata a ${assignedStaffMember?.name}`);
-    return { message: 'Email processata e assegnata con successo.', assignment: assignedStaffMember, emailRecord: savedEmail };
+    // 3. Aggiorna l'email nel DB con i risultati dell'AI
+    const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
+    const { error: updateError } = await supabase.from('incoming_emails').update({
+        assigned_to_staff_id: aiResult.assigned_to_staff_id,
+        ai_confidence_score: aiResult.ai_confidence_score,
+        ai_reasoning: aiResult.ai_reasoning,
+        status: newStatus,
+    }).eq('id', emailRecordId);
+
+    if (updateError) {
+        console.error('API Supabase AI update error (process.post):', updateError.message);
+        throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento AI dell'email: ${updateError.message}` });
+    }
+    console.log(`AI analysis updated for manual email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+
+    // 4. Se l'AI ha assegnato e trovato un'email, inoltra l'email
+    let assignedStaffMember = null;
+    if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+        try {
+            await sendEmail(
+                aiResult.assignedStaffEmail,
+                sender.split('<')[0].trim() || sender, // Nome dal mittente originale
+                sender, // Email mittente originale
+                subject,
+                body_text, // Invia il testo originale
+                aiResult.ai_reasoning
+            );
+            // Aggiorna lo stato a 'forwarded'
+            await supabase.from('incoming_emails').update({
+                status: 'forwarded'
+            }).eq('id', emailRecordId);
+
+            assignedStaffMember = { 
+                id: aiResult.assigned_to_staff_id, 
+                name: aiResult.assignedStaffName, 
+                email: aiResult.assignedStaffEmail 
+            };
+            console.log(`Manual email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+
+        } catch (forwardError) {
+            console.error('API Error during manual email forwarding (process.post):', forwardError);
+            // Aggiorna lo stato a 'forward_error'
+            await supabase.from('incoming_emails').update({
+                status: 'forward_error'
+            }).eq('id', emailRecordId);
+            throw createError({ statusCode: 500, statusMessage: `Errore durante l'inoltro dell'email: ${forwardError.message}` });
+        }
+    } else {
+        console.warn(`Manual email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+        // Lo stato è già 'manual_review' dal passo precedente
+    }
+
+    setResponseStatus(event, 200);
+    return { 
+      status: 'success',
+      message: 'Email processata e assegnata con successo.', 
+      assignment: assignedStaffMember, 
+      emailRecord: savedEmail 
+    };
+
+  } catch (error) {
+    console.error('Unhandled error in process.post.js:', error);
+    setResponseStatus(event, error.statusCode || 500);
+    return { 
+        status: 'error',
+        message: error.statusMessage || 'Si è verificato un errore imprevisto.',
+        details: error.message // Per dettagli nell'errore frontend
+    };
+  }
 });
