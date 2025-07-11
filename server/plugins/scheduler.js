@@ -19,7 +19,8 @@ export default defineNitroPlugin(async (nitroApp) => {
   // Programma l'esecuzione periodica della funzione di elaborazione email.
   console.log('Email processing scheduler started and scheduled to run every 5 minutes.');
   
-  Cron('*/5 * * * *', async () => {
+  // *** MODIFICA QUI: Aggiungi "new" prima di Cron() ***
+  new Cron('*/5 * * * *', async () => { 
     console.log('Running scheduled email processing (every 5 minutes)...');
     try {
       await processNewIncomingEmails();
@@ -28,10 +29,7 @@ export default defineNitroPlugin(async (nitroApp) => {
     }
   }, { timezone: 'Europe/Rome' });
 
-  // *** NUOVA AGGIUNTA: Mantiene l'Event Loop attivo per lo scheduler ***
-  // Questo previene che il processo Node.js si fermi se non ci sono altre operazioni attive.
-  // Un timer fittizio che si esegue ogni minuto.
-  setInterval(() => {
-    // console.log('Keeping Node.js event loop alive...'); // Puoi scommentare per debug
-  }, 1000 * 60); // Ogni minuto
+  // Il setInterval per mantenere l'event loop non è più necessario qui
+  // dato che Croner dovrebbe mantenere il processo attivo se instanziato correttamente.
+  // Se il problema persiste, possiamo riconsiderarlo.
 });
