@@ -5,6 +5,7 @@ Directory structure:
     ├── components.json
     ├── nuxt.config.ts
     ├── package.json
+    ├── test-imap-connection.js
     ├── tsconfig.json
     ├── components/
     │   └── ui/
@@ -72,11 +73,19 @@ Directory structure:
     │   └── robots.txt
     └── server/
         ├── tsconfig.json
-        └── api/
-            ├── inbox.get.js
-            └── emails/
-                ├── process.post.js
-                └── webhook.post.js
+        ├── api/
+        │   ├── inbox.get.js
+        │   └── emails/
+        │       ├── process.post.js
+        │       └── webhook.post.js
+        ├── plugins/
+        │   └── scheduler.js
+        └── utils/
+            ├── aiService.js
+            ├── emailSender.js
+            ├── imapClient.js
+            ├── mailProcessor.js
+            └── supabaseAdmin.js
 
 ================================================
 FILE: README.md
@@ -184,8 +193,8 @@ body {
 /* Stili per il tema scuro (opzionale, ma buona pratica) */
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #121212; /* Un grigio scuro */
-    color: #e0e0e0; /* Un bianco sporco */
+    background-color: #f9f6f6; /* Un grigio scuro */
+    color: #060000; /* Un bianco sporco */
   }
 }
 </style>
@@ -233,11 +242,18 @@ export default defineNuxtConfig({
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
     sendgridApiKey: process.env.SENDGRID_API_KEY, 
     senderEmail: process.env.SENDER_EMAIL,
+    imapHost: process.env.IMAP_HOST,
+    imapPort: parseInt(process.env.IMAP_PORT || '993'),
+    imapUsername: process.env.IMAP_USERNAME,
+    imapPassword: process.env.IMAP_PASSWORD,
+    imapMailbox: process.env.IMAP_MAILBOX || 'INBOX',
     public: {
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
     }
   },
+
+
 })
 
 
@@ -250,7 +266,7 @@ FILE: package.json
   "type": "module",
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "dev": "NODE_TLS_REJECT_UNAUTHORIZED=0 nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare"
@@ -261,7 +277,11 @@ FILE: package.json
     "autoprefixer": "^10.4.21",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^17.2.0",
     "lucide-vue-next": "^0.525.0",
+    "mailparser": "^3.7.4",
+    "node-cron": "^4.2.0",
+    "node-imap": "^0.9.6",
     "nuxt": "^3.17.6",
     "radix-vue": "^1.9.17",
     "reka-ui": "^2.3.2",
@@ -279,6 +299,125 @@ FILE: package.json
   }
 }
 
+
+
+================================================
+FILE: test-imap-connection.js
+================================================
+// test-imap-connection.js - Moduli ES Syntax
+
+import 'dotenv/config'; // Importa dotenv in modo che carichi le variabili
+
+import Imap from 'node-imap';
+import { simpleParser } from 'mailparser';
+
+const config = {
+  imapHost: process.env.IMAP_HOST,
+  imapPort: parseInt(process.env.IMAP_PORT || '993'),
+  imapUsername: process.env.IMAP_USERNAME,
+  imapPassword: process.env.IMAP_PASSWORD,
+  imapMailbox: process.env.IMAP_MAILBOX || 'INBOX',
+};
+
+console.log('--- IMAP Test Connection ---');
+console.log('IMAP_HOST:', config.imapHost);
+console.log('IMAP_PORT:', config.imapPort);
+console.log('IMAP_USERNAME:', config.imapUsername);
+// Non loggare la password per sicurezza
+
+// Attiva il debug verboso di node-imap (puÃ² essere molto dettagliato)
+Imap.debug = console.log;
+
+const imap = new Imap({
+  user: config.imapUsername,
+  password: config.imapPassword,
+  host: config.imapHost,
+  port: config.imapPort,
+  tls: true,
+  // *** IMPORTANTE: SOLO PER AMBIENTI DI SVILUPPO/TEST! ***
+  // Questa opzione disabilita la verifica che il nome host del server IMAP
+  // corrisponda al nome nel suo certificato SSL.
+  // Ãˆ NECESSARIO se il tuo provider (es. Shellrent) usa un certificato generico.
+  // Espone a vulnerabilitÃ  MITM in produzione. RIMUOVILA se vai in produzione con un certificato valido!
+  tlsOpts: { rejectUnauthorized: false }
+});
+
+imap.once('ready', () => {
+  console.log('IMAP: Connected successfully!');
+  imap.openBox(config.imapMailbox, false, (err, box) => {
+    if (err) {
+      console.error('IMAP: Error opening mailbox:', err);
+      imap.end();
+      return;
+    }
+    console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
+
+    // Cerca email non lette (UNSEEN)
+    imap.search(['UNSEEN'], (err, uids) => {
+      if (err) {
+        console.error('IMAP: Error searching for emails:', err);
+        imap.end();
+        return;
+      }
+
+      if (!uids || uids.length === 0) {
+        console.log('IMAP: No new unseen emails.');
+        imap.end();
+        return;
+      }
+
+      console.log(`IMAP: Found ${uids.length} unseen emails. Fetching them.`);
+
+      const f = imap.fetch(uids, { bodies: '' }); // Fetch the entire email body
+      f.on('message', (msg, seqno) => {
+        console.log(`IMAP: Processing message #${seqno} (UID: ${uids[seqno - 1]})`);
+        let buffer = '';
+        msg.on('body', (stream) => {
+          stream.on('data', (chunk) => {
+            buffer += chunk.toString('utf8');
+          });
+          stream.once('end', async () => {
+            try {
+              const parsed = await simpleParser(buffer);
+              console.log(`  From: ${parsed.from?.text}`);
+              console.log(`  Subject: ${parsed.subject}`);
+              console.log(`  Date: ${parsed.date}`);
+              // Puoi aggiungere parsed.text o parsed.html per vedere il corpo
+            } catch (parseErr) {
+              console.error('  Error parsing email:', parseErr);
+            }
+          });
+        });
+      });
+
+      f.once('error', (fetchErr) => {
+        console.error('IMAP: Fetch error:', fetchErr);
+        imap.end();
+      });
+
+      f.once('end', () => {
+        console.log('IMAP: Finished fetching messages.');
+        // Marca le email come lette, cosÃ¬ non le rileggi sempre
+        imap.addFlags(uids, ['\\Seen'], (flagErr) => {
+          if (flagErr) console.error('IMAP: Error marking emails as seen:', flagErr);
+          console.log('IMAP: Emails marked as seen.');
+          imap.end(); // Disconnettiti dall'IMAP
+        });
+      });
+    });
+  });
+});
+
+imap.once('error', (err) => {
+  console.error('IMAP: Global error event:', err);
+  imap.end();
+});
+
+imap.once('end', () => {
+  console.log('IMAP: Connection gracefully closed.');
+});
+
+imap.connect();
 
 
 ================================================
@@ -1225,14 +1364,14 @@ FILE: pages/index.vue
 ================================================
 <!-- File: pages/index.vue -->
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Aggiungi 'computed'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+// Rimosso: import { Input } from '@/components/ui/input';
+// Rimosso: import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
+// Rimosso: import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
@@ -1242,17 +1381,29 @@ const processedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
 const isLoading = ref(true); // Per la tabella della posta smistata
-const isProcessing = ref(false); // Per il modulo di invio
+// Rimosso: const isProcessing = ref(false); // Per il modulo di invio
+
+// NUOVO: Stato per il filtro attivo
+const activeFilter = ref('all'); // PuÃ² essere 'all', 'new', 'analyzed', 'forwarded', etc.
 
 // --- DATI DEL MODULO ---
-const newEmail = ref({
-  sender: 'cliente.generico@email.com',
-  subject: 'Richiesta informazioni fattura',
-  body_text: 'Buongiorno, vorrei ricevere una copia della fattura n. 123 del mese scorso. Grazie.'
-});
+// Rimosso: const newEmail = ref({...}); // Non piÃ¹ necessario
 
 // Toast per notifiche
 const { toast } = useToast();
+
+// NUOVO: Computed property per le email filtrate
+const filteredEmails = computed(() => {
+  if (activeFilter.value === 'all') {
+    return processedEmails.value;
+  }
+  // Filtra per stato singolo o per gruppo di stati "Problemi"
+  if (activeFilter.value === 'problems') {
+    return processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status));
+  }
+  return processedEmails.value.filter(email => email.status === activeFilter.value);
+});
+
 
 // --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
@@ -1271,56 +1422,45 @@ const fetchProcessedEmails = async () => {
   }
 };
 
-const processManualEmail = async () => {
-  if (!newEmail.value.sender || !newEmail.value.subject || !newEmail.value.body_text) {
-    toast({
-      title: 'Dati mancanti',
-      description: 'Compila tutti i campi per poter analizzare l\'email.',
-      variant: 'destructive',
-    });
-    return;
-  }
-
-  isProcessing.value = true;
-  try {
-    const result = await $fetch('/api/emails/process', {
-      method: 'POST',
-      body: newEmail.value,
-    });
-    
-    toast({
-      title: 'Successo!',
-      description: `Email assegnata a ${result.assignment?.name || 'N/D'}.`,
-    });
-
-    // Pulisce il modulo e ricarica la lista
-    newEmail.value = { sender: '', subject: '', body_text: '' };
-    await fetchProcessedEmails();
-
-  } catch (error) {
-    console.error("Errore durante l'analisi:", error);
-    toast({
-      title: 'Errore durante l\'analisi',
-      description: error.data?.message || 'Si Ã¨ verificato un errore imprevisto.',
-      variant: 'destructive',
-    });
-  } finally {
-    isProcessing.value = false;
-  }
-};
+// Rimosso: const processManualEmail = async () => {...}; // Non piÃ¹ necessario
 
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
   showContentModal.value = true;
 };
 
-// --- FUNZIONI UTILI ---
+// --- NUOVE FUNZIONI UTILI PER LA GRAFICA ---
 const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
+
 const getConfidenceVariant = (score) => {
-  if (score === null || score === undefined) return 'secondary';
-  if (score >= 0.8) return 'default'; // Verde nel tema di default
-  if (score >= 0.5) return 'secondary';
-  return 'destructive';
+  if (score === null || score === undefined) return 'secondary'; // Grigio
+  if (score >= 0.8) return 'default'; // Verde (Successo)
+  if (score >= 0.5) return 'secondary'; // Giallo/Grigio (Mediocre)
+  return 'destructive'; // Rosso (Basso/Fallimento)
+};
+
+const getStatusVariant = (status) => {
+  switch (status) {
+    case 'new': return 'secondary'; // Nuovo (grigio chiaro)
+    case 'analyzed': return 'outline'; // Analizzato (contorno)
+    case 'forwarded': return 'default'; // Inoltrato (verde principale)
+    case 'manual_review': return 'destructive'; // Richiede Revisione (rosso)
+    case 'ai_error': return 'destructive'; // Errore AI (rosso)
+    case 'forward_error': return 'destructive'; // Errore Inoltro (rosso)
+    default: return 'secondary'; // Default
+  }
+};
+
+const getStatusLabel = (status) => {
+  switch (status) {
+    case 'new': return 'Nuova';
+    case 'analyzed': return 'Analizzata';
+    case 'forwarded': return 'Inoltrata';
+    case 'manual_review': return 'Revisione Manuale';
+    case 'ai_error': return 'Errore AI';
+    case 'forward_error': return 'Errore Inoltro';
+    default: return status; // Se lo stato Ã¨ sconosciuto, mostra il testo originale
+  }
 };
 
 // --- HOOK ---
@@ -1334,33 +1474,8 @@ onMounted(() => {
     <!-- Componente per mostrare le notifiche -->
     <Toaster />
 
-    <!-- Card per l'invio manuale -->
-    <Card>
-      <CardHeader>
-        <CardTitle>Test Manuale Analisi Email</CardTitle>
-        <CardDescription>Inserisci i dati di un'email per testare l'assegnazione da parte dell'AI.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form @submit.prevent="processManualEmail" class="space-y-4">
-          <div class="space-y-2">
-            <Label for="sender">Mittente</Label>
-            <Input id="sender" v-model="newEmail.sender" placeholder="es. mario.rossi@email.com" />
-          </div>
-          <div class="space-y-2">
-            <Label for="subject">Oggetto</Label>
-            <Input id="subject" v-model="newEmail.subject" placeholder="es. Problema con fattura" />
-          </div>
-          <div class="space-y-2">
-            <Label for="body_text">Corpo del Messaggio</Label>
-            <Textarea id="body_text" v-model="newEmail.body_text" placeholder="Scrivi qui il testo dell'email..." class="min-h-32" />
-          </div>
-          <Button type="submit" :disabled="isProcessing" class="w-full">
-            <span v-if="isProcessing">Analisi in corso...</span>
-            <span v-else>Analizza e Smista Email</span>
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <!-- Rimosso: Card per l'invio manuale -->
+    <!-- Qui era presente la Card per il test manuale -->
 
     <!-- Card per la posta smistata -->
     <Card>
@@ -1369,30 +1484,85 @@ onMounted(() => {
         <CardDescription>Elenco delle email analizzate e assegnate a un dipartimento/responsabile.</CardDescription>
       </CardHeader>
       <CardContent>
+        <!-- NUOVO: Filtri e pulsante Aggiorna -->
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4 mb-4">
+          <div class="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'all' }"
+              @click="activeFilter = 'all'"
+            >
+              Tutti ({{ processedEmails.length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'new' }"
+              @click="activeFilter = 'new'"
+            >
+              Nuove ({{ processedEmails.filter(e => e.status === 'new').length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'forwarded' }"
+              @click="activeFilter = 'forwarded'"
+            >
+              Inoltrate ({{ processedEmails.filter(e => e.status === 'forwarded').length }})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              :class="{ 'bg-destructive': activeFilter === 'problems' }"
+              @click="activeFilter = 'problems'"
+            >
+              Problemi ({{ processedEmails.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length }})
+            </Button>
+          </div>
+          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
+            <!-- Icona Aggiorna (Refresh) -->
+            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 9V4m0 0l2.5-2.5M4 4l-2.5 2.5m1.5 8h-1.5m0 0v-5h-.582m15.356 2A8.001 8.001 0 0120 15v5m0 0l-2.5 2.5m2.5-2.5l2.5-2.5"></path>
+            </svg>
+            Aggiorna
+          </Button>
+        </div>
+
         <div v-if="isLoading" class="text-center py-16"><p>Caricamento storico...</p></div>
-        <div v-else-if="processedEmails.length > 0">
+        <div v-else-if="filteredEmails.length > 0"> <!-- MODIFICA: USA filteredEmails -->
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Mittente & Oggetto</TableHead>
                 <TableHead>Etichetta (Assegnato A)</TableHead>
                 <TableHead class="text-center">Confidenza AI</TableHead>
+                <TableHead class="text-center">Stato</TableHead> <!-- NUOVA COLONNA PER LO STATO -->
                 <TableHead class="text-right">Ricevuta il</TableHead>
                 <TableHead class="text-center">Contenuto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="email in processedEmails" :key="email.id">
+              <TableRow v-for="email in filteredEmails" :key="email.id"> <!-- MODIFICA: USA filteredEmails -->
                 <TableCell class="font-medium">
                   <div>{{ email.sender }}</div>
                   <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{{ email.staff?.name || 'Non Assegnato' }}</Badge>
+                  <!-- Badge per Assegnato A - se staff.name Ã¨ vuoto, usa un badge 'Non Assegnato' -->
+                  <Badge :variant="email.staff?.name ? 'outline' : 'secondary'">
+                    {{ email.staff?.name || 'Non Assegnato' }}
+                  </Badge>
                 </TableCell>
                 <TableCell class="text-center">
+                  <!-- Badge per Confidenza AI con colori diversi -->
                   <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
                     {{ email.ai_confidence_score !== null && email.ai_confidence_score !== undefined ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
+                  </Badge>
+                </TableCell>
+                <TableCell class="text-center"> <!-- NUOVA CELLA PER LO STATO -->
+                  <Badge :variant="getStatusVariant(email.status)">
+                    {{ getStatusLabel(email.status) }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
@@ -1403,7 +1573,7 @@ onMounted(() => {
             </TableBody>
           </Table>
         </div>
-        <div v-else class="text-center py-16"><p class="text-muted-foreground">Nessuna email Ã¨ stata ancora processata.</p></div>
+        <div v-else class="text-center py-16"><p class="text-muted-foreground">Nessuna email trovata per il filtro selezionato.</p></div>
       </CardContent>
     </Card>
     
@@ -1473,82 +1643,111 @@ FILE: server/api/emails/process.post.js
 ================================================
 // File: server/api/emails/process.post.js
 
-import { defineEventHandler, readBody, createError } from 'h3';
-import { serverSupabaseClient } from '#supabase/server';
-import { useRuntimeConfig } from '#imports';
-import { $fetch } from 'ofetch';
-
-const config = useRuntimeConfig();
-const GOOGLE_API_KEY = config.googleApiKey;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
-
-const PROMPT_EMAIL_TRIAGE = `
-Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito Ã¨ analizzare un'email in arrivo e assegnarla al dipartimento o alla persona piÃ¹ appropriata.
-
-Ecco la lista del personale e delle loro responsabilitÃ :
---- LISTA PERSONALE ---
-{staff_list}
------------------------
-
-Analizza il seguente contenuto dell'email (oggetto e corpo) e determina quale persona/dipartimento Ã¨ il piÃ¹ adatto a gestirla.
-
---- CONTENUTO EMAIL ---
-Oggetto: {email_subject}
-Corpo: {email_body}
------------------------
-
-La tua risposta DEVE essere un oggetto JSON con il seguente formato, senza alcun testo aggiuntivo:
-{
-  "best_match_staff_id": "l'UUID del dipendente/dipartimento scelto dalla lista",
-  "confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
-  "reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipartimento. Esempio: 'L'email menziona problemi di accesso al software, che Ã¨ di competenza del Supporto Tecnico.'"
-}
-
-Se NESSUNO sembra appropriato, rispondi con l'ID della "Segreteria Generale" o del dipartimento di default e un confidence_score basso.
-`;
-
-async function callGemini(prompt) {
-    const response = await $fetch.raw(GEMINI_API_URL, {
-        method: 'POST', body: { contents: [{ parts: [{ text: prompt }] }] }
-    });
-    const responseData = response._data;
-    if (!responseData.candidates?.[0]) throw new Error('Risposta non valida da Gemini');
-    return responseData.candidates[0].content.parts[0].text;
-}
+import { defineEventHandler, readBody, createError, setResponseStatus } from 'h3';
+import { serverSupabaseClient } from '#supabase/server'; // Per accedere al client Supabase (con chiave anonima)
+import { analyzeEmailWithAI } from '../../utils/aiService'; // Funzione centralizzata per l'analisi AI
+import { sendEmail } from '../../utils/emailSender';     // Funzione centralizzata per l'invio email
 
 export default defineEventHandler(async (event) => {
-    const supabase = await serverSupabaseClient(event);
-    const body = await readBody(event);
-    const { sender, subject, body_text } = body;
-    if (!subject || !body_text) throw createError({ statusCode: 400, statusMessage: 'Oggetto o corpo email mancanti.' });
+  const supabase = await serverSupabaseClient(event); // Client Supabase per operazioni DB
+  const body = await readBody(event);
+  const { sender, subject, body_text } = body;
 
-    const { data: staff, error: staffError } = await supabase.from('staff').select('id, name, responsibilities');
-    if (staffError) throw createError({ statusCode: 500, statusMessage: staffError.message });
-    if (!staff || staff.length === 0) throw createError({ statusCode: 500, statusMessage: 'Nessun personale configurato nel database.' });
+  if (!sender || !subject || !body_text) {
+    throw createError({ statusCode: 400, statusMessage: 'Mittente, oggetto o corpo email mancanti.' });
+  }
 
-    const staffListForPrompt = staff.map(s => `ID: ${s.id}, Nome: ${s.name}, Competenze: ${s.responsibilities}`).join('\n');
-    const finalPrompt = PROMPT_EMAIL_TRIAGE.replace('{staff_list}', staffListForPrompt).replace('{email_subject}', subject).replace('{email_body}', body_text.substring(0, 3000));
+  let emailRecordId = null; // ID dell'email nel DB, per aggiornamenti successivi
 
-    let aiResponse;
-    try {
-        const rawResponse = await callGemini(finalPrompt);
-        aiResponse = JSON.parse(rawResponse.replace(/```json/g, '').replace(/```/g, '').trim());
-    } catch (e) {
-        throw createError({ statusCode: 500, statusMessage: 'Errore durante l\'analisi AI dell\'email.' });
-    }
-    
+  try {
+    // 1. Salva l'email nel database con stato 'new'
     const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
-        sender, subject, body_text, status: 'assigned',
-        assigned_to_staff_id: aiResponse.best_match_staff_id,
-        ai_confidence_score: aiResponse.confidence_score,
-        ai_reasoning: aiResponse.reasoning
+        sender: sender,
+        subject: subject,
+        body_text: body_text,
+        // body_html: null, // Non abbiamo HTML dal form manuale, quindi null
+        status: 'new',
     }]).select().single();
+
+    if (saveError) {
+        console.error('API Supabase save error (process.post):', saveError.message);
+        throw createError({ statusCode: 500, statusMessage: `Errore durante il salvataggio dell'email: ${saveError.message}` });
+    }
+    emailRecordId = savedEmail.id;
+    console.log(`Manual email saved to DB with ID: ${emailRecordId}`);
+
+    // 2. Analisi AI
+    const aiResult = await analyzeEmailWithAI(sender, subject, body_text);
     
-    if (saveError) throw createError({ statusCode: 500, statusMessage: saveError.message });
-    
-    const assignedStaffMember = staff.find(s => s.id === aiResponse.best_match_staff_id);
-    console.log(`Email da ${sender} assegnata a ${assignedStaffMember?.name}`);
-    return { message: 'Email processata e assegnata con successo.', assignment: assignedStaffMember, emailRecord: savedEmail };
+    // 3. Aggiorna l'email nel DB con i risultati dell'AI
+    const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
+    const { error: updateError } = await supabase.from('incoming_emails').update({
+        assigned_to_staff_id: aiResult.assigned_to_staff_id,
+        ai_confidence_score: aiResult.ai_confidence_score,
+        ai_reasoning: aiResult.ai_reasoning,
+        status: newStatus,
+    }).eq('id', emailRecordId);
+
+    if (updateError) {
+        console.error('API Supabase AI update error (process.post):', updateError.message);
+        throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento AI dell'email: ${updateError.message}` });
+    }
+    console.log(`AI analysis updated for manual email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+
+    // 4. Se l'AI ha assegnato e trovato un'email, inoltra l'email
+    let assignedStaffMember = null;
+    if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+        try {
+            await sendEmail(
+                aiResult.assignedStaffEmail,
+                sender.split('<')[0].trim() || sender, // Nome dal mittente originale
+                sender, // Email mittente originale
+                subject,
+                body_text, // Invia il testo originale
+                aiResult.ai_reasoning
+            );
+            // Aggiorna lo stato a 'forwarded'
+            await supabase.from('incoming_emails').update({
+                status: 'forwarded'
+            }).eq('id', emailRecordId);
+
+            assignedStaffMember = { 
+                id: aiResult.assigned_to_staff_id, 
+                name: aiResult.assignedStaffName, 
+                email: aiResult.assignedStaffEmail 
+            };
+            console.log(`Manual email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+
+        } catch (forwardError) {
+            console.error('API Error during manual email forwarding (process.post):', forwardError);
+            // Aggiorna lo stato a 'forward_error'
+            await supabase.from('incoming_emails').update({
+                status: 'forward_error'
+            }).eq('id', emailRecordId);
+            throw createError({ statusCode: 500, statusMessage: `Errore durante l'inoltro dell'email: ${forwardError.message}` });
+        }
+    } else {
+        console.warn(`Manual email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+        // Lo stato Ã¨ giÃ  'manual_review' dal passo precedente
+    }
+
+    setResponseStatus(event, 200);
+    return { 
+      status: 'success',
+      message: 'Email processata e assegnata con successo.', 
+      assignment: assignedStaffMember, 
+      emailRecord: savedEmail 
+    };
+
+  } catch (error) {
+    console.error('Unhandled error in process.post.js:', error);
+    setResponseStatus(event, error.statusCode || 500);
+    return { 
+        status: 'error',
+        message: error.statusMessage || 'Si Ã¨ verificato un errore imprevisto.',
+        details: error.message // Per dettagli nell'errore frontend
+    };
+  }
 });
 
 
@@ -1557,32 +1756,174 @@ FILE: server/api/emails/webhook.post.js
 ================================================
 // File: server/api/emails/webhook.post.js
 
-import { defineEventHandler, readBody, createError } from 'h3';
-import { serverSupabaseClient } from '#supabase/server';
+import { defineEventHandler, readBody, createError, setResponseStatus } from 'h3';
+import { serverSupabaseClient } from '#supabase/server'; // Per accedere al client Supabase (con chiave anonima)
+import { analyzeEmailWithAI } from '../../utils/aiService'; // Funzione centralizzata per l'analisi AI
+import { sendEmail } from '../../utils/emailSender';     // Funzione centralizzata per l'invio email
+
+export default defineEventHandler(async (event) => {
+    const supabase = await serverSupabaseClient(event); // Client Supabase per operazioni DB
+    const payload = await readBody(event); // Il payload del webhook (es. da SendGrid Inbound Parse)
+
+    // Estrai i dati dal payload (questi campi sono comuni nei webhook di parsing email)
+    const senderRaw = payload.from || ''; 
+    const senderEmail = senderRaw.match(/<(.+)>/)?.[1] || senderRaw; // Estrae solo l'email da "Nome <email@example.com>"
+    const senderName = senderRaw.replace(/<.+>/, '').trim() || senderEmail;
+    const subject = payload.subject || 'Nessun Oggetto';
+    const body_text = payload.text || payload.html || 'Corpo email vuoto.';
+    const body_html = payload.html || null;
+
+    if (!senderEmail) {
+      console.warn("Webhook ricevuto senza mittente valido. Ignorato.");
+      setResponseStatus(event, 200); // Importante rispondere 200 OK per evitare re-invii da webhook
+      return { status: "ignored", message: "Payload incompleto, email ignorata."};
+    }
+
+    let emailRecordId = null;
+
+    try {
+        // 1. Salva l'email nel database con stato 'new'
+        const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
+            sender: senderEmail,
+            subject: subject, 
+            body_text: body_text, 
+            body_html: body_html,
+            status: 'new',
+        }]).select().single();
+        
+        if (saveError) {
+            console.error('Webhook Supabase save error (webhook.post):', saveError.message);
+            throw new Error(`Errore Supabase (insert): ${saveError.message}`); // Rilancia per cattura successiva
+        }
+        emailRecordId = savedEmail.id;
+        console.log(`Webhook email saved to DB with ID: ${emailRecordId}`);
+
+        // 2. Analisi AI
+        const aiResult = await analyzeEmailWithAI(senderEmail, subject, body_text);
+        
+        // 3. Aggiorna l'email nel DB con i risultati dell'AI
+        const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
+        const { error: updateError } = await supabase.from('incoming_emails').update({
+            assigned_to_staff_id: aiResult.assigned_to_staff_id,
+            ai_confidence_score: aiResult.ai_confidence_score,
+            ai_reasoning: aiResult.ai_reasoning,
+            status: newStatus,
+        }).eq('id', emailRecordId);
+
+        if (updateError) {
+            console.error('Webhook Supabase AI update error (webhook.post):', updateError.message);
+            throw new Error(`Errore Supabase (update AI): ${updateError.message}`);
+        }
+        console.log(`AI analysis updated for webhook email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+
+        // 4. Inoltra l'email al dipendente corretto
+        if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+            try {
+                await sendEmail(
+                    aiResult.assignedStaffEmail,
+                    senderName,
+                    senderEmail,
+                    subject,
+                    body_text, // O body_html se preferisci, a seconda di sendEmail
+                    aiResult.ai_reasoning
+                );
+                // Aggiorna lo stato a 'forwarded'
+                await supabase.from('incoming_emails').update({
+                    status: 'forwarded'
+                }).eq('id', emailRecordId);
+                console.log(`Webhook email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+
+            } catch (forwardError) {
+                console.error('Webhook Error during email forwarding (webhook.post):', forwardError);
+                // Aggiorna lo stato a 'forward_error'
+                await supabase.from('incoming_emails').update({
+                    status: 'forward_error'
+                }).eq('id', emailRecordId);
+                throw forwardError; // Rilancia l'errore per il catch generale
+            }
+        } else {
+            console.warn(`Webhook email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+            // Lo stato Ã¨ giÃ  'manual_review'
+        }
+
+        setResponseStatus(event, 200); // Sempre 200 OK per i webhook che hanno elaborato il messaggio
+        return { status: 'success', message: `Email da ${senderEmail} processata e assegnata.` };
+
+    } catch (error) {
+        console.error('Unhandled error in webhook.post.js:', error);
+        // Se c'Ã¨ un errore e emailRecordId Ã¨ noto, prova ad aggiornare lo stato a 'processing_error'
+        if (emailRecordId) {
+            await supabase.from('incoming_emails').update({
+                status: 'processing_error',
+                // error_message: error.message // Se hai un campo per i messaggi di errore
+            }).eq('id', emailRecordId);
+        }
+        setResponseStatus(event, 200); // **IMPORTANTE:** Rispondi sempre 200 OK ai webhook per evitare re-invii continui, anche in caso di errore interno.
+        return { status: 'error', message: `Errore interno durante l'elaborazione del webhook: ${error.message}` };
+    }
+});
+
+
+================================================
+FILE: server/plugins/scheduler.js
+================================================
+// server/plugins/scheduler.js
+// Rimuovi l'import di node-cron
+// import * as cron from 'node-cron'; 
+
+import { Cron } from 'croner'; // <-- Importa Cron da croner (senza CronOptions)
+import { processNewIncomingEmails } from '../utils/mailProcessor';
+
+export default defineNitroPlugin(async (nitroApp) => {
+  // Gestore globale per gli errori di Promise non catturati (unhandledRejection).
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('GLOBAL ERROR: Unhandled Rejection at Promise', promise, 'reason:', reason);
+  });
+
+  // Esegui la funzione di elaborazione email all'avvio del server Nitro.
+  console.log('Initial email processing run on server start.');
+  try {
+    await processNewIncomingEmails();
+  } catch (error) {
+    console.error('Error during initial email processing run:', error);
+  }
+
+
+  console.log('Email processing scheduler started and scheduled to run every 5 minutes.');
+  
+  Cron('*/5 * * * *', async () => {
+    console.log('Running scheduled email processing (every 5 minutes)...');
+    try {
+      await processNewIncomingEmails();
+    } catch (error) {
+      console.error('Error during scheduled email processing run:', error);
+    }
+  }, { timezone: 'Europe/Rome' }); 
+});
+
+
+================================================
+FILE: server/utils/aiService.js
+================================================
+// server/utils/aiService.js
 import { useRuntimeConfig } from '#imports';
 import { $fetch } from 'ofetch';
-import sgMail from '@sendgrid/mail';
+// Usiamo il client admin per fetch staff
+import { getSupabaseAdminClient } from './supabaseAdmin'; 
 
-// --- CONFIGURAZIONE ---
 const config = useRuntimeConfig();
 const GOOGLE_API_KEY = config.googleApiKey;
-const SENDGRID_API_KEY = config.sendgridApiKey;
-const SENDER_EMAIL = config.senderEmail; // L'email da cui inviamo (es. dispatcher@elyassrochdigmail.com)
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
 
-// Inizializza il client di SendGrid una sola volta
-sgMail.setApiKey(SENDGRID_API_KEY);
-
-// --- PROMPT PER L'INTELLIGENZA ARTIFICIALE ---
 const PROMPT_EMAIL_TRIAGE = `
-Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito Ã¨ analizzare un'email in arrivo e assegnarla al dipartimento o alla persona piÃ¹ appropriata.
+Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito Ã¨ analizzare un'email in arrivo e assegnarla al membro dello staff piÃ¹ appropriato.
 
 Ecco la lista del personale e delle loro responsabilitÃ :
 --- LISTA PERSONALE ---
 {staff_list}
 -----------------------
 
-Analizza il seguente contenuto dell'email (mittente, oggetto e corpo) e determina quale persona/dipartimento Ã¨ il piÃ¹ adatto a gestirla.
+Analizza il seguente contenuto dell'email (mittente, oggetto e corpo) e determina quale persona dello staff Ã¨ il piÃ¹ adatto a gestirla.
 
 --- CONTENUTO EMAIL ---
 Mittente: {email_from}
@@ -1592,48 +1933,78 @@ Corpo: {email_body}
 
 La tua risposta DEVE essere un oggetto JSON con il seguente formato, senza alcun testo aggiuntivo:
 {
-  "best_match_staff_id": "l'UUID del dipendente/dipartimento scelto dalla lista",
-  "confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
-  "reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipartimento."
+  "assigned_to_staff_id": "l'UUID del dipendente scelto dalla lista. Se NESSUNO sembra appropriato, lascia null o l'UUID di un dipendente generico per 'segreteria generale' se ne hai uno predefinito.",
+  "ai_confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
+  "ai_reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipendente/ufficio. Esempio: 'L'email menziona problemi di accesso al software, che Ã¨ di competenza del Supporto Tecnico.'"
 }
-
-Se NESSUNO sembra appropriato, rispondi con l'ID della "Segreteria Generale" o del dipartimento di default e un confidence_score basso.
 `;
 
-// --- FUNZIONI HELPER ---
+export async function analyzeEmailWithAI(sender, subject, body_text) {
+    const supabaseAdmin = getSupabaseAdminClient(); // Usa il client admin
+    const { data: staff, error: staffError } = await supabaseAdmin.from('staff').select('id, name, responsibilities, email'); // Selezioniamo anche email
+    if (staffError) {
+        console.error('Error fetching staff for AI:', staffError.message);
+        throw new Error('Impossibile caricare il personale per l\'analisi AI.');
+    }
+    if (!staff || staff.length === 0) {
+        console.warn('Nessun personale configurato nel database per l\'analisi AI.');
+        return {
+            assigned_to_staff_id: null,
+            ai_confidence_score: 0.1,
+            ai_reasoning: "Nessun personale configurato per l'assegnazione.",
+        };
+    }
 
-/**
- * Chiama l'API di Google Gemini per analizzare il testo.
- * @param {string} prompt Il prompt completo da inviare a Gemini.
- * @returns {Promise<object>} La risposta JSON parsata dall'AI.
- */
-async function callGemini(prompt) {
+    const staffListForPrompt = staff.map(s => `ID: ${s.id}, Nome: ${s.name}, ResponsabilitÃ : ${s.responsibilities}, Email: ${s.email}`).join('\n');
+    const finalPrompt = PROMPT_EMAIL_TRIAGE
+        .replace('{staff_list}', staffListForPrompt)
+        .replace('{email_from}', sender)
+        .replace('{email_subject}', subject)
+        .replace('{email_body}', body_text.substring(0, 4000));
+
+    let aiResponse;
     try {
         const response = await $fetch.raw(GEMINI_API_URL, {
-            method: 'POST', body: { contents: [{ parts: [{ text: prompt }] }] }
+            method: 'POST', body: { contents: [{ parts: [{ text: finalPrompt }] }] }
         });
         const responseData = response._data;
         if (!responseData.candidates?.[0]?.content?.parts?.[0]?.text) {
-          throw new Error('Risposta non valida o malformata da Gemini');
+            throw new Error('Risposta non valida o malformata da Gemini');
         }
         const rawJson = responseData.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(rawJson);
+        aiResponse = JSON.parse(rawJson);
     } catch (e) {
         console.error("Errore chiamata Gemini:", e.message);
-        throw createError({ statusCode: 500, statusMessage: 'Errore durante l\'analisi AI dell\'email.' });
+        throw new Error(`Errore durante l'analisi AI dell'email: ${e.message}`);
     }
+    
+    // Valida l'ID dello staff suggerito
+    const bestMatchStaff = staff.find(s => s.id === aiResponse.assigned_to_staff_id);
+    const finalAssignedId = bestMatchStaff ? aiResponse.assigned_to_staff_id : null;
+
+    return {
+        assigned_to_staff_id: finalAssignedId,
+        ai_confidence_score: parseFloat(aiResponse.ai_confidence_score) || 0,
+        ai_reasoning: aiResponse.ai_reasoning,
+        assignedStaffEmail: bestMatchStaff?.email || null, // Aggiungiamo l'email dello staff qui
+        assignedStaffName: bestMatchStaff?.name || null,
+    };
 }
 
-/**
- * Usa SendGrid per inoltrare l'email al dipartimento competente.
- * @param {string} to Indirizzo email del destinatario (il dipartimento).
- * @param {string} fromName Nome del mittente originale.
- * @param {string} fromAddress Indirizzo email del mittente originale.
- * @param {string} subject Oggetto dell'email originale.
- * @param {string} originalBody Corpo dell'email originale.
- * @param {string} aiReasoning Motivazione dell'AI per l'assegnazione.
- */
-async function forwardEmailWithSendGrid(to, fromName, fromAddress, subject, originalBody, aiReasoning) {
+
+================================================
+FILE: server/utils/emailSender.js
+================================================
+// server/utils/emailSender.js
+import sgMail from '@sendgrid/mail';
+import { useRuntimeConfig } from '#imports';
+
+const config = useRuntimeConfig();
+sgMail.setApiKey(config.sendgridApiKey);
+
+export async function sendEmail(to, fromName, fromAddress, subject, originalBody, aiReasoning) {
+  const SENDER_EMAIL = config.senderEmail; // L'email verificata in SendGrid (test@aitaky.it)
+
   const htmlBody = `
     <div style="font-family: sans-serif; border: 1px solid #ddd; padding: 16px; border-radius: 8px;">
       <p><strong>Questa email Ã¨ stata smistata automaticamente dal sistema AI.</strong></p>
@@ -1652,86 +2023,343 @@ async function forwardEmailWithSendGrid(to, fromName, fromAddress, subject, orig
 
   const msg = {
     to: to,
-    from: SENDER_EMAIL, // Usa l'email configurata nelle variabili d'ambiente
+    from: SENDER_EMAIL, // Usa l'email configurata in .env e verificata in SendGrid
     subject: `[Smistato da AI] ${subject}`,
     html: htmlBody,
-    replyTo: fromAddress, // Permette di rispondere direttamente al cliente
+    replyTo: fromAddress, // Permette di rispondere direttamente al cliente originale
   };
 
   try {
     await sgMail.send(msg);
-    console.log(`Email inoltrata con successo a ${to}`);
+    console.log(`Email inoltrata con successo a ${to} tramite SendGrid.`);
   } catch (error) {
     console.error("Errore durante l'inoltro con SendGrid:", error.response?.body || error.message);
-    // Non blocchiamo il flusso per questo, ma logghiamo l'errore.
+    throw error; // Rilancia l'errore per gestirlo nel chiamante
   }
 }
 
-// --- HANDLER PRINCIPALE DEL WEBHOOK ---
 
-export default defineEventHandler(async (event) => {
-    // SendGrid invia i dati come 'multipart/form-data'. readBody di Nuxt/H3 lo gestisce.
-    const payload = await readBody(event);
+================================================
+FILE: server/utils/imapClient.js
+================================================
+// server/utils/imapClient.js
+import Imap from 'node-imap';
+import { simpleParser } from 'mailparser';
 
-    // Estrai i dati dal payload di SendGrid
-    const senderRaw = payload.from || ''; 
-    const senderEmail = senderRaw.match(/<(.+)>/)?.[1] || senderRaw;
-    const senderName = senderRaw.replace(/<.+>/, '').trim() || senderEmail;
-    const subject = payload.subject || 'Nessun Oggetto';
-    const body_text = payload.text || payload.html || 'Corpo email vuoto.';
+export async function fetchNewEmails(config) {
+  const imap = new Imap({
+    user: config.imapUsername,
+    password: config.imapPassword,
+    host: config.imapHost,
+    port: config.imapPort,
+    tls: true,
+    tlsOpts: { rejectUnauthorized: false } // Mantiene il bypass del certificato
+  });
 
-    if (!senderEmail) {
-      console.warn("Webhook ricevuto senza mittente valido. Ignorato.");
-      return { message: "Payload incompleto, email ignorata."};
+  // Flag per assicurarsi che la connessione venga chiusa una sola volta e in modo sicuro
+  let connectionState = 'connecting'; // 'connecting', 'ready', 'closed', 'error'
+  const endConnection = (error = null) => {
+    if (connectionState === 'closed') {
+      return; // GiÃ  chiusa
     }
-
-    const supabase = await serverSupabaseClient(event);
-
-    // 1. Recupera la lista del personale da Supabase
-    const { data: staff, error: staffError } = await supabase.from('staff').select('id, name, responsibilities, email');
-    if (staffError) throw createError({ statusCode: 500, statusMessage: `Errore Supabase (staff): ${staffError.message}` });
-    if (!staff || staff.length === 0) throw createError({ statusCode: 500, statusMessage: 'Nessun personale configurato nel database.' });
-    
-    // 2. Prepara e chiama l'AI
-    const staffListForPrompt = staff.map(s => `- ID: ${s.id}, Nome: ${s.name}, Competenze: ${s.responsibilities}`).join('\n');
-    const finalPrompt = PROMPT_EMAIL_TRIAGE
-        .replace('{staff_list}', staffListForPrompt)
-        .replace('{email_from}', senderRaw)
-        .replace('{email_subject}', subject)
-        .replace('{email_body}', body_text.substring(0, 4000)); // Limita la lunghezza per sicurezza
-
-    const aiResponse = await callGemini(finalPrompt);
-    
-    // 3. Salva l'email e l'analisi su Supabase
-    const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
-        sender: senderEmail,
-        subject: subject, 
-        body_text: body_text, 
-        status: 'assigned',
-        assigned_to_staff_id: aiResponse.best_match_staff_id,
-        ai_confidence_score: aiResponse.confidence_score,
-        ai_reasoning: aiResponse.reasoning
-    }]).select().single();
-    
-    if (saveError) throw createError({ statusCode: 500, statusMessage: `Errore Supabase (insert): ${saveError.message}` });
-    
-    // 4. Inoltra l'email al dipartimento corretto
-    const assignedStaffMember = staff.find(s => s.id === aiResponse.best_match_staff_id);
-    if (assignedStaffMember && assignedStaffMember.email) {
-        await forwardEmailWithSendGrid(
-            assignedStaffMember.email,
-            senderName,
-            senderEmail,
-            subject,
-            body_text,
-            aiResponse.reasoning
-        );
-    } else {
-        console.warn(`Nessun indirizzo email trovato per lo staff ${assignedStaffMember?.name} (ID: ${aiResponse.best_match_staff_id}). Impossibile inoltrare.`);
+    try {
+      if (imap.state !== 'disconnected') { // Tenta di chiudere solo se non Ã¨ giÃ  disconnesso
+        imap.end();
+      }
+      connectionState = 'closed';
+      if (error) {
+        console.error('IMAP: Connection ended due to error, but trying to close gracefully:', error.message);
+      } else {
+        console.log('IMAP: Connection gracefully closed.');
+      }
+    } catch (e) {
+      console.warn('IMAP: Error during imap.end() call (ignored, likely already closed):', e.message);
+      connectionState = 'closed';
     }
+  };
 
-    // Rispondi a SendGrid con 200 OK per confermare la ricezione
-    event.res.statusCode = 200;
-    return { status: 'success', message: `Email da ${senderEmail} processata e assegnata a ${assignedStaffMember?.name || 'sconosciuto'}.` };
-});
+  return new Promise(async (resolve, reject) => {
+    imap.once('ready', () => {
+      connectionState = 'ready';
+      console.log('IMAP: Connected successfully to the main client!');
+
+      // *** MODIFICA QUI: Sposta il gestore degli errori del socket qui dentro ***
+      // imap.client.socket dovrebbe essere definito una volta che la connessione Ã¨ "ready"
+      if (imap.client && imap.client.socket) { // Aggiungi un controllo di sicurezza in piÃ¹
+        imap.client.socket.on('error', (err) => {
+          if (err.code === 'ECONNRESET') {
+            console.warn('IMAP (Socket): Received ECONNRESET. This is often a benign post-operation disconnect.', err.message);
+          } else {
+            console.error('IMAP (Socket): Unhandled socket error:', err);
+          }
+          endConnection(err); // Assicurati che la connessione venga terminata
+        });
+      } else {
+          console.warn('IMAP: imap.client or imap.client.socket was not available after ready event. Socket error handling might be incomplete.');
+      }
+
+      imap.openBox(config.imapMailbox, false, (err, box) => {
+        if (err) {
+          console.error('IMAP: Error opening mailbox:', err);
+          endConnection(err); // Chiudi la connessione in caso di errore
+          return reject(err); // Rifiuta la promise
+        }
+        console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
+
+        imap.search(['UNSEEN'], (err, uids) => {
+          if (err) {
+            console.error('IMAP: Error searching for emails:', err);
+            endConnection(err); // Chiudi la connessione in caso di errore
+            return reject(err); // Rifiuta la promise
+          }
+
+          if (!uids || uids.length === 0) {
+            console.log('IMAP: No new unseen emails.');
+            endConnection(); // Chiudi la connessione
+            return resolve([]); // Risolvi con array vuoto se non ci sono email
+          }
+
+          console.log(`IMAP: Found ${uids.length} unseen emails. Fetching them.`);
+
+          const fetchPromises = []; // Array per contenere le Promises di ogni singola email
+
+          const f = imap.fetch(uids, { bodies: '', struct: true, markSeen: false }); // markSeen: false per marcare manualmente
+
+          f.on('message', (msg, seqno) => {
+            let buffer = '';
+            let currentUid; // Variabile per immagazzinare l'UID di questo specifico messaggio
+
+            // Cattura l'UID appena gli attributi sono disponibili
+            msg.once('attributes', (attrs) => {
+              currentUid = attrs.uid;
+            });
+
+            // Crea una Promise per il parsing di questo singolo messaggio
+            const messagePromise = new Promise(messageResolve => {
+              msg.on('body', (stream) => {
+                stream.on('data', (chunk) => {
+                  buffer += chunk.toString('utf8');
+                });
+                stream.once('end', async () => {
+                  try {
+                    const parsed = await simpleParser(buffer);
+                    messageResolve({ // Risolvi la Promise del messaggio con i dati parsati
+                      uid: currentUid, // USA L'UID CATTURATO DAGLI ATTRIBUTI
+                      messageId: parsed.messageId,
+                      from: parsed.from?.text,
+                      to: parsed.to?.text,
+                      subject: parsed.subject,
+                      text: parsed.text,
+                      html: parsed.html,
+                      date: parsed.date,
+                      raw: buffer
+                    });
+                  } catch (parseErr) {
+                    console.error('Error parsing email:', parseErr);
+                    messageResolve(null); // Risolvi con null in caso di errore di parsing
+                  }
+                });
+              });
+            });
+            fetchPromises.push(messagePromise); // Aggiungi la Promise di questo messaggio all'array
+          });
+
+          f.once('error', (fetchErr) => {
+            console.error('IMAP: Fetch stream error:', fetchErr);
+            endConnection(fetchErr);
+            reject(fetchErr);
+          });
+
+          f.once('end', async () => {
+            console.log('IMAP: Fetch stream ended. Waiting for all messages to parse.');
+            const parsedEmails = (await Promise.all(fetchPromises)).filter(email => email !== null);
+            console.log(`IMAP: Successfully parsed ${parsedEmails.length} emails.`);
+
+            if (parsedEmails.length > 0) {
+              const validUidsToMark = parsedEmails.map(e => e.uid).filter(uid => uid !== undefined && uid !== null);
+              
+              if (validUidsToMark.length > 0) {
+                try {
+                  await new Promise((flagResolve, flagReject) => {
+                    imap.addFlags(validUidsToMark, ['\\Seen'], (flagErr) => {
+                      if (flagErr) {
+                        console.error('IMAP: Error marking emails as seen:', flagErr);
+                        flagReject(flagErr); // Rifiuta la Promise interna se c'Ã¨ un errore
+                      } else {
+                        console.log('IMAP: Valid emails marked as seen.');
+                        flagResolve(); // Risolvi la Promise interna
+                      }
+                    });
+                  });
+                } catch (addFlagsError) {
+                  // Se addFlags fallisce, lo logghiamo ma non blocchiamo il flusso principale
+                  console.error('IMAP: Failed to mark emails as seen due to:', addFlagsError);
+                }
+                endConnection();
+                resolve(parsedEmails);
+              } else {
+                console.warn('IMAP: No valid UIDs found to mark as seen, but emails were parsed. Ending connection.');
+                endConnection();
+                resolve(parsedEmails);
+              }
+            } else {
+              console.log('IMAP: No emails parsed successfully. Ending connection.');
+              endConnection();
+              resolve([]);
+            }
+          });
+        });
+      });
+    });
+
+    // Gestore generale per errori IMAP (cattura eventi che non sono legati a specifici stream di fetch)
+    imap.once('error', (err) => {
+      // Cattura ECONNRESET solo se la connessione non Ã¨ giÃ  gestita altrove.
+      // A volte ECONNRESET avviene dopo la chiusura intenzionale del socket.
+      if (!connectionEnded && ['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(err.code) && connectionState === 'ready') {
+        console.warn(`IMAP: Received a non-critical connection error (${err.code}). Ignoring as a potential post-operation issue.`, err.message);
+      } else if (!connectionEnded) { // Per altri errori non gestiti e se la connessione non Ã¨ chiusa
+        console.error('IMAP: Global connection error:', err);
+        reject(err);
+      }
+      endConnection(err); // Assicurati di chiudere la connessione
+    });
+
+    imap.once('end', () => {
+      console.log('IMAP: Connection gracefully ended (IMAP end event).');
+    });
+
+    imap.connect();
+  });
+}
+
+
+================================================
+FILE: server/utils/mailProcessor.js
+================================================
+// server/utils/mailProcessor.js
+import { fetchNewEmails } from './imapClient';
+import { analyzeEmailWithAI } from './aiService';
+import { sendEmail } from './emailSender';
+import { getSupabaseAdminClient } from './supabaseAdmin';
+
+export async function processNewIncomingEmails() {
+  console.log('Starting email processing cycle...');
+  const config = useRuntimeConfig();
+  const supabaseAdmin = getSupabaseAdminClient();
+
+  try {
+    // 1. Leggi le nuove email dalla casella IMAP
+    const incomingRawEmails = await fetchNewEmails(config);
+    console.log(`Fetched ${incomingRawEmails.length} new emails from IMAP.`);
+
+    for (const email of incomingRawEmails) {
+      console.log(`Processing email from ${email.from} - Subject: ${email.subject}`);
+      let emailRecordId = null; // Per tenere traccia dell'ID nel DB
+
+      try {
+        // 2. Salva l'email raw nel database
+        const { data: savedEmail, error: saveError } = await supabaseAdmin.from('incoming_emails').insert([{
+            sender: email.from,
+            subject: email.subject,
+            body_text: email.text,
+            body_html: email.html,
+            status: 'new',
+            // created_at sarÃ  impostato automaticamente dal default del DB
+        }]).select().single();
+
+        if (saveError) throw new Error(`Supabase save error: ${saveError.message}`);
+        emailRecordId = savedEmail.id;
+        console.log(`Email saved to DB with ID: ${emailRecordId}`);
+
+        // 3. Analizza l'email con l'AI (Gemini)
+        const aiResult = await analyzeEmailWithAI(email.from, email.subject, email.text || email.html);
+        
+        // 4. Aggiorna l'email nel DB con i risultati dell'AI
+        const { error: updateError } = await supabaseAdmin.from('incoming_emails').update({
+            assigned_to_staff_id: aiResult.assigned_to_staff_id,
+            ai_confidence_score: aiResult.ai_confidence_score,
+            ai_reasoning: aiResult.ai_reasoning,
+            status: aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review', // Se l'AI non assegna, richiede revisione manuale
+        }).eq('id', emailRecordId);
+
+        if (updateError) throw new Error(`Supabase AI update error: ${updateError.message}`);
+        console.log(`AI analysis updated for email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+
+        // 5. Inoltra l'email al destinatario suggerito dall'AI
+        if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+            try {
+                await sendEmail(
+                    aiResult.assignedStaffEmail,
+                    email.from.split('<')[0].trim() || email.from, // Nome del mittente
+                    email.from, // Indirizzo email del mittente originale
+                    email.subject,
+                    email.text || email.html, // Invia il testo o l'HTML originale
+                    aiResult.ai_reasoning
+                );
+
+                // Aggiorna lo stato a 'forwarded' nel DB
+                const { error: forwardStatusError } = await supabaseAdmin.from('incoming_emails').update({
+                    status: 'forwarded',
+                    // Non ci sono campi forwarded_to_email o forwarded_at nel tuo DB schema
+                }).eq('id', emailRecordId);
+
+                if (forwardStatusError) console.error(`Error updating forwarded status for ID ${emailRecordId}:`, forwardStatusError.message);
+                console.log(`Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+
+            } catch (forwardError) {
+                console.error(`Error forwarding email ID ${emailRecordId}:`, forwardError);
+                // Aggiorna lo stato a 'forward_error' nel DB
+                await supabaseAdmin.from('incoming_emails').update({
+                    status: 'forward_error',
+                    // Potresti aggiungere un campo 'error_details' per salvare l'errore completo
+                }).eq('id', emailRecordId);
+            }
+        } else {
+            console.warn(`Email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+        }
+
+      } catch (innerError) {
+        console.error(`Error processing single email (ID ${emailRecordId || 'N/A'}):`, innerError);
+        // Se si verifica un errore prima di salvare l'email o durante il primo salvataggio,
+        // emailRecordId potrebbe essere null. Gestisci di conseguenza.
+        if (emailRecordId) {
+            await supabaseAdmin.from('incoming_emails').update({
+                status: 'processing_error',
+                // error_message: innerError.message, // Se aggiungi un campo per i messaggi di errore
+            }).eq('id', emailRecordId);
+        }
+      }
+    }
+  } catch (globalError) {
+    console.error('Global error during email processing cycle:', globalError);
+  }
+  console.log('Email processing cycle finished.');
+}
+
+
+================================================
+FILE: server/utils/supabaseAdmin.js
+================================================
+// server/utils/supabaseAdmin.js
+import { createClient } from '@supabase/supabase-js';
+import { useRuntimeConfig } from '#imports';
+
+let supabaseAdminClient;
+
+export function getSupabaseAdminClient() {
+  if (!supabaseAdminClient) {
+    const config = useRuntimeConfig();
+    if (!config.public.supabaseUrl || !config.supabaseServiceRoleKey) {
+      throw new Error('Missing Supabase URL or Service Role Key in runtimeConfig for admin client.');
+    }
+    // Usa la SERVICE_ROLE_KEY per operazioni lato server con piÃ¹ permessi
+    supabaseAdminClient = createClient(config.public.supabaseUrl, config.supabaseServiceRoleKey, {
+      auth: {
+        persistSession: false, // Non persistere la sessione per un client server-side
+      },
+    });
+  }
+  return supabaseAdminClient;
+}
 
