@@ -29,7 +29,5 @@ export default defineNitroPlugin(async (nitroApp) => {
     }
   }, { timezone: 'Europe/Rome' });
 
-  // Il setInterval per mantenere l'event loop non è più necessario qui
-  // dato che Croner dovrebbe mantenere il processo attivo se instanziato correttamente.
-  // Se il problema persiste, possiamo riconsiderarlo.
+
 });

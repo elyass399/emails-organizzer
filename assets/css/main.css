@@ -1,0 +1,18 @@
+/* assets/css/main.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Aggiungi questa sezione per forzare lo sfondo bianco del DialogContent */
+/* Questo sovrascrive lo stile di default di Shadcn per il DialogContent */
+.dialog-content-force-white {
+  background-color: white !important;
+  color: black !important;
+}
+
+/* Forse necessario anche per il tema scuro, se dark mode è attivo */
+.dark .dialog-content-force-white {
+  background-color: white !important;
+  color: black !important;
+}
