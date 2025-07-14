@@ -1,9 +1,11 @@
+// components/ui/toast/use-toast.ts
+
 import type { Component, VNode } from 'vue'
 import type { ToastProps } from '.'
 import { computed, ref } from 'vue'
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 3000 // MODIFICA QUI: Da 1000000 a 3000
 
 export type StringOrVNode =
   | string
