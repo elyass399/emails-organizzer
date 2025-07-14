@@ -1,57 +1,71 @@
 <!-- File: pages/index.vue -->
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed } from 'vue'; // Rimosso 'reactive'
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Importa i componenti Dialog necessari da '@/components/ui/dialog'.
-// Assicurati che questi componenti siano basati su radix-vue per evitare conflitti.
+// Importa i componenti Dialog necessari
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+// Rimosse importazioni di Label, Input, Textarea, DialogTrigger
 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
 
-// Importa le icone necessarie per l'infografica e per il pulsante Aggiorna da lucide-vue-next
-import { Mail, CheckCircle, AlertCircle, RefreshCw } from 'lucide-vue-next';
+// Importa le icone necessarie per l'infografica e per il pulsante Aggiorna
+// Icone specifiche come nell'immagine: Mail, Calculator, Settings (ingranaggio), Calendar (agenda), RefreshCw
+import { Mail, RefreshCw, Calculator, Settings, Calendar } from 'lucide-vue-next';
 
 
 // --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
+// Rimosso allStaff, showAddStaffDialog, newStaffForm
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
 const isLoading = ref(true); // Per la tabella della posta smistata
 
+// Rimosso staffVisuals mapping
+
 // Stato per il filtro attivo
-const activeFilter = ref('all'); // Può essere 'all', 'new', 'analyzed', 'forwarded', etc.
+const activeFilter = ref('all');
 
 // Toast per notifiche
 const { toast } = useToast();
 
 // Computed properties per filtrare le email visualizzate nella tabella
 const filteredEmails = computed(() => {
+  if (!processedEmails.value || !Array.isArray(processedEmails.value)) {
+    return [];
+  }
   if (activeFilter.value === 'all') {
     return processedEmails.value;
   }
-  // Filtra per stato singolo o per gruppo di stati "Problemi"
   if (activeFilter.value === 'problems') {
     return processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status));
   }
   return processedEmails.value.filter(email => email.status === activeFilter.value);
 });
 
-// NUOVE PROPRIETÀ COMPUTED PER L'INFOGRAFICA (calcolate dai dati fetched)
-const totalEmails = computed(() => processedEmails.value.length);
-const newEmailsCount = computed(() => processedEmails.value.filter(e => e.status === 'new').length);
-const forwardedEmailsCount = computed(() => processedEmails.value.filter(e => e.status === 'forwarded').length);
-const problemEmailsCount = computed(() => processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length);
+// PROPRIETÀ COMPUTED PER LA CARD EMAIL TOTALI
+const totalEmailsCount = computed(() => processedEmails.value ? processedEmails.value.length : 0);
 
-const automationRate = computed(() => {
-  if (totalEmails.value === 0) return '0%';
-  const automated = processedEmails.value.filter(e => e.status === 'forwarded').length;
-  return ((automated / totalEmails.value) * 100).toFixed(0) + '%';
+// PROPRIETÀ COMPUTED PER LE CARTE DEGLI UFFICI (NOMI DAL DB)
+const forwardedToContabilitaCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Ufficio Contabilità').length;
 });
+const forwardedToSupportoTecnicoCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Supporto Tecnico').length;
+});
+const forwardedToSegreteriaCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Segreteria Generale').length;
+});
+
+
+// Mantenute le computed properties per i filtri della tabella
+const newEmailsCount = computed(() => processedEmails.value ? processedEmails.value.filter(e => e.status === 'new').length : 0);
+const forwardedEmailsFilterCount = computed(() => processedEmails.value ? processedEmails.value.filter(e => e.status === 'forwarded').length : 0); // Rinominato per evitare conflitto
+const problemEmailsCount = computed(() => processedEmails.value ? processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length : 0);
 
 
 // --- FUNZIONI PRINCIPALI ---
@@ -59,7 +73,7 @@ const fetchProcessedEmails = async () => {
   isLoading.value = true;
   try {
     const data = await $fetch('/api/inbox');
-    processedEmails.value = data;
+    processedEmails.value = data || [];
   }
   catch (error) {
     console.error("Impossibile caricare la posta smistata:", error);
@@ -68,41 +82,36 @@ const fetchProcessedEmails = async () => {
       description: 'Impossibile caricare lo storico delle email.',
       variant: 'destructive',
     });
+    processedEmails.value = [];
   }
   finally {
     isLoading.value = false;
   }
 };
 
+// Rimosso fetchStaff
+
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
   showContentModal.value = true;
 };
 
+// Rimosso addStaff
+
 // --- FUNZIONI UTILI PER LA GRAFICA E I BADGE ---
 const formatDate = (dateString) => {
+  if (!dateString) return 'N/D';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Data non valida';
   const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
   return date.toLocaleString('it-IT', options);
 };
 
 const getConfidenceVariant = (score) => {
-  if (score === null || score === undefined) return 'secondary'; // Grigio
-  if (score >= 0.8) return 'default'; // Verde (Successo)
-  if (score >= 0.5) return 'secondary'; // Giallo/Grigio (Mediocre)
-  return 'destructive'; // Rosso (Basso/Fallimento)
-};
-
-const getStatusVariant = (status) => {
-  switch (status) {
-    case 'new': return 'secondary'; // Nuovo (grigio chiaro)
-    case 'analyzed': return 'outline'; // Analizzato (contorno)
-    case 'forwarded': return 'default'; // Inoltrato (verde principale)
-    case 'manual_review': return 'destructive'; // Richiede Revisione (rosso)
-    case 'ai_error': return 'destructive'; // Errore AI (rosso)
-    case 'forward_error': return 'destructive'; // Errore Inoltro (rosso)
-    default: return 'secondary'; // Default
-  }
+  if (score === null || score === undefined) return 'secondary';
+  if (score >= 0.8) return 'default';
+  if (score >= 0.5) return 'secondary';
+  return 'destructive';
 };
 
 const getStatusLabel = (status) => {
@@ -113,13 +122,24 @@ const getStatusLabel = (status) => {
     case 'manual_review': return 'Revisione Manuale';
     case 'ai_error': return 'Errore AI';
     case 'forward_error': return 'Errore Inoltro';
-    default: return status; // Se lo stato è sconosciuto, mostra il testo originale
+    default: return status;
+  }
+};
+
+// FUNZIONE PER ASSEGNARE IL TIPO DI BADGE IN BASE AL NOME DELLO STAFF
+const getStaffBadgeVariant = (staffName) => {
+  switch (staffName) {
+    case 'Ufficio Contabilità': return 'contabilita';
+    case 'Supporto Tecnico': return 'supportoTecnico';
+    case 'Segreteria Generale': return 'segreteria';
+    default: return 'outline';
   }
 };
 
 // --- HOOK ---
-onMounted(() => {
-  fetchProcessedEmails();
+onMounted(async () => {
+  // Rimosso await fetchStaff();
+  await fetchProcessedEmails();
 });
 </script>
 
@@ -130,72 +150,86 @@ onMounted(() => {
 
     <h1 class="text-2xl font-bold mb-4">Gestione Email Intelligente</h1>
 
-    <!-- SEZIONE: INFOGRAFICA (Mini-Cards di Riepilogo) -->
+    <!-- SEZIONE: INFOGRAFICA ESATTA COME DA ULTIMA IMMAGINE FORNITA CON COLORI -->
+    <!-- Layout con 4 colonne per desktop -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <!-- CARTA: EMAIL TOTALI (con gradiente blu/grigio tenue e testo scuro) -->
+      <Card class="bg-gradient-to-br from-blue-50 to-gray-100">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-gray-800">
           <CardTitle class="text-sm font-medium">
             Email Totali
           </CardTitle>
-          <Mail class="h-4 w-4 text-muted-foreground" />
+          <Mail class="h-4 w-4 text-gray-700" />
         </CardHeader>
-        <CardContent>
+        <CardContent class="text-gray-800">
           <div class="text-2xl font-bold">
-            {{ totalEmails }}
+            {{ totalEmailsCount }}
           </div>
-          <p class="text-xs text-muted-foreground">
+          <p class="text-xs text-gray-700">
             Elaborate finora
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <!-- CARTA: EMAIL CONTABILITÀ (gradiente rosso/arancio, testo scuro) -->
+      <Card class="bg-gradient-to-br from-rose-200 to-red-400">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
           <CardTitle class="text-sm font-medium">
-            Inoltrate Automaticamente
+            Email Contabilità
           </CardTitle>
-          <CheckCircle class="h-4 w-4 text-muted-foreground" />
+          <Calculator class="h-4 w-4 text-gray-800" />
         </CardHeader>
-        <CardContent>
+        <CardContent class="text-black">
           <div class="text-2xl font-bold">
-            {{ forwardedEmailsCount }}
+            {{ forwardedToContabilitaCount }}
           </div>
-          <p class="text-xs text-muted-foreground">
-            Tasso automazione: {{ automationRate }}
+          <p class="text-xs text-gray-800">
+            Inoltrate all'Ufficio
+          </p>
+          <p class="text-xs text-gray-800 mt-1">
+            Contabilità
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <!-- CARTA: EMAIL SUPPORTO TECNICO (gradiente giallo/verde, testo scuro) -->
+      <Card class="bg-gradient-to-br from-lime-200 to-green-400">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
           <CardTitle class="text-sm font-medium">
-            Nuove Email
+            Email Supporto Tecnico
           </CardTitle>
-          <Mail class="h-4 w-4 text-muted-foreground" />
+          <Settings class="h-4 w-4 text-gray-800" />
         </CardHeader>
-        <CardContent>
+        <CardContent class="text-black">
           <div class="text-2xl font-bold">
-            {{ newEmailsCount }}
+            {{ forwardedToSupportoTecnicoCount }}
           </div>
-          <p class="text-xs text-muted-foreground">
-            In attesa di elaborazione
+          <p class="text-xs text-gray-800">
+            Inoltrate al Supporto
+          </p>
+          <p class="text-xs text-gray-800 mt-1">
+            Tecnico
           </p>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
+      <!-- CARTA: EMAIL SEGRETERIA (gradiente viola/magenta, testo scuro) -->
+      <Card class="bg-gradient-to-br from-purple-200 to-fuchsia-300">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
           <CardTitle class="text-sm font-medium">
-            Revisione Manuale/Errori
+            Email Segreteria
           </CardTitle>
-          <AlertCircle class="h-4 w-4 text-muted-foreground" />
+          <Calendar class="h-4 w-4 text-gray-800" />
         </CardHeader>
-        <CardContent>
+        <CardContent class="text-black">
           <div class="text-2xl font-bold">
-            {{ problemEmailsCount }}
+            {{ forwardedToSegreteriaCount }}
           </div>
-          <p class="text-xs text-muted-foreground">
-            Richiedono attenzione
+          <p class="text-xs text-gray-800">
+            Inoltrate alla
+          </p>
+          <p class="text-xs text-gray-800 mt-1">
+            Segreteria Generale
           </p>
         </CardContent>
       </Card>
@@ -218,7 +252,7 @@ onMounted(() => {
               :class="{ 'bg-primary text-primary-foreground': activeFilter === 'all' }"
               @click="activeFilter = 'all'"
             >
-              Tutti ({{ processedEmails.length }})
+              Tutti ({{ totalEmailsCount }})
             </Button>
             <Button
               variant="outline"
@@ -226,7 +260,7 @@ onMounted(() => {
               :class="{ 'bg-primary text-primary-foreground': activeFilter === 'new' }"
               @click="activeFilter = 'new'"
             >
-              Nuove ({{ processedEmails.filter(e => e.status === 'new').length }})
+              Nuove ({{ newEmailsCount }})
             </Button>
             <Button
               variant="outline"
@@ -234,7 +268,7 @@ onMounted(() => {
               :class="{ 'bg-primary text-primary-foreground': activeFilter === 'forwarded' }"
               @click="activeFilter = 'forwarded'"
             >
-              Inoltrate ({{ processedEmails.filter(e => e.status === 'forwarded').length }})
+              Inoltrate ({{ forwardedEmailsFilterCount }})
             </Button>
             <Button
               variant="outline"
@@ -242,7 +276,7 @@ onMounted(() => {
               :class="{ 'bg-destructive text-destructive-foreground': activeFilter === 'problems' }"
               @click="activeFilter = 'problems'"
             >
-              Problemi ({{ processedEmails.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length }})
+              Problemi ({{ problemEmailsCount }})
             </Button>
           </div>
           <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
@@ -275,7 +309,8 @@ onMounted(() => {
                   <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
                 </TableCell>
                 <TableCell>
-                  <Badge :variant="email.staff?.name ? 'outline' : 'secondary'">
+                  <!-- Usa la funzione per determinare la variante del badge in base al nome dello staff -->
+                  <Badge :variant="getStaffBadgeVariant(email.staff?.name)">
                     {{ email.staff?.name || 'Non Assegnato' }}
                   </Badge>
                 </TableCell>
@@ -285,16 +320,16 @@ onMounted(() => {
                   </Badge>
                 </TableCell>
                 <TableCell class="text-center">
-                  <Badge :variant="getStatusVariant(email.status)">
+                  <span>
                     {{ getStatusLabel(email.status) }}
-                  </Badge>
+                  </span>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
                 <TableCell class="text-center">
                    <Button
                      @click="viewEmailContent(email)"
                      size="sm"
-                     class="bg-black text-white hover:bg-black/80"
+                     variant="black"
                    >
                      Visualizza
                    </Button>
@@ -312,13 +347,11 @@ onMounted(() => {
     
     <!-- Modale per visualizzare contenuto email -->
     <Dialog :open="showContentModal" @update:open="showContentModal = false">
-      <!-- Applichiamo la classe personalizzata per forzare lo sfondo bianco e testo nero -->
       <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
           <DialogHeader>
               <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
               <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
           </DialogHeader>
-          <!-- Contenuto scrollabile con classi Tailwind -->
           <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
               {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
           </div>
@@ -327,5 +360,8 @@ onMounted(() => {
           </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Rimosso Modale per Aggiungere Nuovo Dipendente/Ufficio -->
+
   </div>
 </template>
