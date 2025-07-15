@@ -5,8 +5,12 @@ Directory structure:
     ├── components.json
     ├── nuxt.config.ts
     ├── package.json
+    ├── tailwind.config.ts
     ├── test-imap-connection.js
     ├── tsconfig.json
+    ├── assets/
+    │   └── css/
+    │       └── main.css
     ├── components/
     │   └── ui/
     │       ├── badge/
@@ -75,6 +79,8 @@ Directory structure:
         ├── tsconfig.json
         ├── api/
         │   ├── inbox.get.js
+        │   ├── staff.get.js
+        │   ├── staff.post.js
         │   └── emails/
         │       ├── process.post.js
         │       └── webhook.post.js
@@ -302,6 +308,100 @@ FILE: package.json
 
 
 ================================================
+FILE: tailwind.config.ts
+================================================
+// tailwind.config.ts
+import type { Config } from 'tailwindcss'
+import animate from 'tailwindcss-animate'
+
+export default {
+  darkMode: ['class'],
+  safelist: ['dark'],
+  theme: {
+    container: {
+      center: true,
+      padding: '2rem',
+      screens: {
+        '2xl': '1400px',
+      },
+    },
+    extend: {
+      colors: {
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        // --- MODIFICHE QUI ---
+        // Forziamo background e foreground per i componenti Shadcn che usano --background
+        background: 'hsl(var(--background))', // Questa Ã¨ la definizione standard
+        foreground: 'hsl(var(--foreground))', // Questa Ã¨ la definizione standard
+
+
+        primary: {
+          DEFAULT: 'hsl(var(--primary))',
+          foreground: 'hsl(var(--primary-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'hsl(var(--secondary))',
+          foreground: 'hsl(var(--secondary-foreground))',
+        },
+        destructive: {
+          DEFAULT: 'hsl(var(--destructive))',
+          foreground: 'hsl(var(--destructive-foreground))',
+        },
+        muted: {
+          DEFAULT: 'hsl(var(--muted))',
+          foreground: 'hsl(var(--muted-foreground))',
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent))',
+          foreground: 'hsl(var(--accent-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+      },
+      borderRadius: {
+        xl: 'calc(var(--radius) + 4px)',
+        lg: 'var(--radius)',
+        md: 'calc(var(--radius) - 2px)',
+        sm: 'calc(var(--radius) - 4px)',
+      },
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+        'collapsible-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-collapsible-content-height)' },
+        },
+        'collapsible-up': {
+          from: { height: 'var(--radix-collapsible-content-height)' },
+          to: { height: '0' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
+        'collapsible-down': 'collapsible-down 0.2s ease-in-out',
+        'collapsible-up': 'collapsible-up 0.2s ease-in-out',
+      },
+    },
+  },
+  plugins: [animate],
+} satisfies Config
+
+
+================================================
 FILE: test-imap-connection.js
 ================================================
 // test-imap-connection.js - Moduli ES Syntax
@@ -431,6 +531,29 @@ FILE: tsconfig.json
 
 
 ================================================
+FILE: assets/css/main.css
+================================================
+/* assets/css/main.css */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Aggiungi questa sezione per forzare lo sfondo bianco del DialogContent */
+/* Questo sovrascrive lo stile di default di Shadcn per il DialogContent */
+.dialog-content-force-white {
+  background-color: white !important;
+  color: black !important;
+}
+
+/* Forse necessario anche per il tema scuro, se dark mode Ã¨ attivo */
+.dark .dialog-content-force-white {
+  background-color: white !important;
+  color: black !important;
+}
+
+
+================================================
 FILE: components/ui/badge/Badge.vue
 ================================================
 <script setup lang="ts">
@@ -449,7 +572,12 @@ FILE: components/ui/badge/index.ts
 import { type VariantProps, cva } from 'class-variance-authority'
 export { default as Badge } from './Badge.vue'
 export const badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2', {
-    variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80', secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80', destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80', outline: 'text-foreground' } },
+    variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80', secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80', destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80', outline: 'text-foreground border-input',
+    // NUOVE VARIANTI PERSONALIZZATE PER I BADGE DEGLI UFFICI (con text-white)
+    contabilita: 'border-transparent bg-rose-500 text-white', // Rosso Rosato per ContabilitÃ 
+    supportoTecnico: 'border-transparent bg-lime-500 text-white', // Verde Lime per Supporto Tecnico
+    segreteria: 'border-transparent bg-violet-500 text-white', // Viola per Segreteria
+    } },
     defaultVariants: { variant: 'default' },
 })
 export type BadgeVariants = VariantProps<typeof badgeVariants>
@@ -485,6 +613,8 @@ export const buttonVariants = cva('inline-flex items-center justify-center white
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
+        // NUOVA VARIANTE: Sfondo nero, testo bianco
+        black: 'bg-black text-white hover:bg-black/90',
         },
         size: {
         default: 'h-10 px-4 py-2',
@@ -563,9 +693,9 @@ const forwarded = useForwardPropsEmits(props, emits)
 FILE: components/ui/dialog/DialogClose.vue
 ================================================
 <script setup lang="ts">
-import { DialogClose, type DialogCloseProps } from 'reka-ui'
+import { DialogClose, type DialogCloseProps } from 'radix-vue' // <-- CAMBIATO DA reka-ui a radix-vue
 
-const props = defineProps</* @vue-ignore */ DialogCloseProps>() // Aggiungi qui
+const props = defineProps</* @vue-ignore */ DialogCloseProps>()
 </script>
 
 <template>
@@ -573,7 +703,6 @@ const props = defineProps</* @vue-ignore */ DialogCloseProps>() // Aggiungi qui
     <slot />
   </DialogClose>
 </template>
-
 
 
 ================================================
@@ -584,7 +713,7 @@ import { type HTMLAttributes, computed } from 'vue'
 import { DialogClose, DialogContent, type DialogContentEmits, type DialogContentProps, DialogOverlay, DialogPortal, useForwardPropsEmits } from 'radix-vue'
 import { X } from 'lucide-vue-next'
 import { cn } from '@/lib/utils'
-const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
+const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>()
 const emits = defineEmits<DialogContentEmits>()
 const delegatedProps = computed(() => { const { class: _, ...delegated } = props; return delegated })
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
@@ -592,7 +721,8 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
 <template>
   <DialogPortal>
     <DialogOverlay class="fixed inset-0 z-50 bg-black/80" />
-    <DialogContent v-bind="forwarded" :class="cn('fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg', props.class)">
+    <!-- MODIFICA QUI: Aggiunto bg-white !important e dark:bg-white !important dark:text-black !important -->
+    <DialogContent v-bind="forwarded" :class="cn('fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-white !important p-6 shadow-lg duration-200 sm:rounded-lg dark:bg-white !important dark:text-black !important', props.class)">
       <slot />
       <DialogClose class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
         <X class="h-4 w-4" />
@@ -646,16 +776,16 @@ import { reactiveOmit } from '@vueuse/core'
 import { X } from 'lucide-vue-next'
 import {
   DialogClose,
-  DialogContent, // Questo viene da reka-ui qui!
+  DialogContent, // Questo ora viene da radix-vue!
   type DialogContentEmits,
-  type DialogContentProps, // Questo viene da reka-ui qui!
-  DialogOverlay, // Questo viene da reka-ui qui!
-  DialogPortal, // Questo viene da reka-ui qui!
+  type DialogContentProps,
+  DialogOverlay, // Questo ora viene da radix-vue!
+  DialogPortal, // Questo ora viene da radix-vue!
   useForwardPropsEmits,
-} from 'reka-ui'
+} from 'radix-vue' // <-- CAMBIATO DA reka-ui a radix-vue
 import { cn } from '@/lib/utils'
 
-const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
+const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>()
 const emits = defineEmits<DialogContentEmits>()
 const delegatedProps = reactiveOmit(props, 'class')
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
@@ -694,7 +824,6 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
     </DialogOverlay>
   </DialogPortal>
 </template>
-
 
 
 ================================================
@@ -888,7 +1017,7 @@ const props = defineProps<{
 ================================================
 FILE: components/ui/table/TableHead.vue
 ================================================
-<template><th :class="cn('h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0', props.class)"><slot /></th></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
+<template><th :class="cn('h-8 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0', props.class)"><slot /></th></template><script setup lang="ts">import type { HTMLAttributes } from 'vue'; import { cn } from '@/lib/utils'; const props = defineProps<{ class?: HTMLAttributes['class'] }>() </script>
 
 
 ================================================
@@ -904,11 +1033,10 @@ const props = defineProps<{
 </script>
 
 <template>
-  <th :class="cn('h-10 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-0.5', props.class)">
+  <th :class="cn('h-8 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-0.5', props.class)">
     <slot />
   </th>
 </template>
-
 
 
 ================================================
@@ -1175,20 +1303,24 @@ const delegatedProps = reactiveOmit(props, 'class')
 </script>
 
 <template>
-  <ToastViewport v-bind="delegatedProps" :class="cn('fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]', props.class)" />
+  <ToastViewport
+    v-bind="delegatedProps"
+    :class="cn('fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col p-4 md:max-w-[420px]', props.class)"
+  />
 </template>
-
 
 
 ================================================
 FILE: components/ui/toast/use-toast.ts
 ================================================
+// components/ui/toast/use-toast.ts
+
 import type { Component, VNode } from 'vue'
 import type { ToastProps } from '.'
 import { computed, ref } from 'vue'
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 3000 // MODIFICA QUI: Da 1000000 a 3000
 
 export type StringOrVNode =
   | string
@@ -1350,7 +1482,6 @@ function toast(props: Toast) {
 export { toast, useToast }
 
 
-
 ================================================
 FILE: lib/utils.ts
 ================================================
@@ -1364,44 +1495,60 @@ FILE: pages/index.vue
 ================================================
 <!-- File: pages/index.vue -->
 <script setup>
-import { ref, onMounted, computed } from 'vue'; // Aggiungi 'computed'
+import { ref, onMounted, computed, reactive } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-// Rimosso: import { Input } from '@/components/ui/input';
-// Rimosso: import { Label } from '@/components/ui/label';
+
+// Importa i componenti Dialog, Label, Input, Textarea necessari
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// Rimosso: import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
+
+// Importa le icone necessarie per l'infografica e per il pulsante Aggiorna
+import { Mail, RefreshCw, Calculator, Settings, Calendar, Users } from 'lucide-vue-next';
+
 
 // --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true); // Per la tabella della posta smistata
-// Rimosso: const isProcessing = ref(false); // Per il modulo di invio
+const isLoading = ref(true);
+const showAddStaffDialog = ref(false);
 
-// NUOVO: Stato per il filtro attivo
-const activeFilter = ref('all'); // PuÃ² essere 'all', 'new', 'analyzed', 'forwarded', etc.
+// Form per aggiungere nuovo staff
+const newStaffForm = reactive({
+  name: '',
+  email: '',
+  responsibilities: '',
+});
 
-// --- DATI DEL MODULO ---
-// Rimosso: const newEmail = ref({...}); // Non piÃ¹ necessario
+const activeFilter = ref('all');
 
 // Toast per notifiche
 const { toast } = useToast();
 
-// NUOVO: Computed property per le email filtrate
 const filteredEmails = computed(() => {
-  if (activeFilter.value === 'all') {
-    return processedEmails.value;
+  if (!processedEmails.value || !Array.isArray(processedEmails.value)) {
+    return [];
   }
-  // Filtra per stato singolo o per gruppo di stati "Problemi"
-  if (activeFilter.value === 'problems') {
-    return processedEmails.value.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status));
-  }
-  return processedEmails.value.filter(email => email.status === activeFilter.value);
+  return processedEmails.value;
+});
+
+const totalEmailsCount = computed(() => processedEmails.value ? processedEmails.value.length : 0);
+const forwardedToContabilitaCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Ufficio ContabilitÃ ').length;
+});
+const forwardedToSupportoTecnicoCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Supporto Tecnico').length;
+});
+const forwardedToSegreteriaCount = computed(() => {
+  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Segreteria Generale').length;
 });
 
 
@@ -1409,46 +1556,76 @@ const filteredEmails = computed(() => {
 const fetchProcessedEmails = async () => {
   isLoading.value = true;
   try {
-    processedEmails.value = await $fetch('/api/inbox');
-  } catch (error) {
+    const data = await $fetch('/api/inbox');
+    processedEmails.value = data || [];
+  }
+  catch (error) {
     console.error("Impossibile caricare la posta smistata:", error);
     toast({
       title: 'Errore',
       description: 'Impossibile caricare lo storico delle email.',
       variant: 'destructive',
     });
-  } finally {
+    processedEmails.value = [];
+  }
+  finally {
     isLoading.value = false;
   }
 };
-
-// Rimosso: const processManualEmail = async () => {...}; // Non piÃ¹ necessario
 
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
   showContentModal.value = true;
 };
 
-// --- NUOVE FUNZIONI UTILI PER LA GRAFICA ---
-const formatDate = (dateString) => new Date(dateString).toLocaleString('it-IT');
+const addStaff = async () => {
+  console.log('addStaff function called'); // Lasciamo il log per verifica
+  try {
+    const response = await $fetch('/api/staff', {
+      method: 'POST',
+      body: newStaffForm,
+    });
+    
+    if (response.status === 'success') {
+      toast({
+        title: 'Successo!',
+        description: 'Dipendente aggiunto e salvato nel database.',
+      });
+      showAddStaffDialog.value = false;
+      Object.assign(newStaffForm, { name: '', email: '', responsibilities: '' });
+      await fetchProcessedEmails();
 
-const getConfidenceVariant = (score) => {
-  if (score === null || score === undefined) return 'secondary'; // Grigio
-  if (score >= 0.8) return 'default'; // Verde (Successo)
-  if (score >= 0.5) return 'secondary'; // Giallo/Grigio (Mediocre)
-  return 'destructive'; // Rosso (Basso/Fallimento)
+    } else {
+      toast({
+        title: 'Errore',
+        description: response.message || 'Errore durante l\'aggiunta del dipendente.',
+        variant: 'destructive',
+      });
+    }
+  } catch (error) {
+    console.error('Errore durante l\'aggiunta del dipendente:', error);
+    toast({
+      title: 'Errore',
+      description: error.data?.statusMessage || 'Si Ã¨ verificato un errore imprevisto.',
+      variant: 'destructive',
+    });
+  }
 };
 
-const getStatusVariant = (status) => {
-  switch (status) {
-    case 'new': return 'secondary'; // Nuovo (grigio chiaro)
-    case 'analyzed': return 'outline'; // Analizzato (contorno)
-    case 'forwarded': return 'default'; // Inoltrato (verde principale)
-    case 'manual_review': return 'destructive'; // Richiede Revisione (rosso)
-    case 'ai_error': return 'destructive'; // Errore AI (rosso)
-    case 'forward_error': return 'destructive'; // Errore Inoltro (rosso)
-    default: return 'secondary'; // Default
-  }
+// --- FUNZIONI UTILI PER LA GRAFICA E I BADGE ---
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/D';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return 'Data non valida';
+  const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+  return date.toLocaleString('it-IT', options);
+};
+
+const getConfidenceVariant = (score) => {
+  if (score === null || score === undefined) return 'secondary';
+  if (score >= 0.8) return 'default';
+  if (score >= 0.5) return 'secondary';
+  return 'destructive';
 };
 
 const getStatusLabel = (status) => {
@@ -1459,127 +1636,174 @@ const getStatusLabel = (status) => {
     case 'manual_review': return 'Revisione Manuale';
     case 'ai_error': return 'Errore AI';
     case 'forward_error': return 'Errore Inoltro';
-    default: return status; // Se lo stato Ã¨ sconosciuto, mostra il testo originale
+    default: return status;
+  }
+};
+
+const getStaffBadgeVariant = (staffName) => {
+  switch (staffName) {
+    case 'Ufficio ContabilitÃ ': return 'contabilita';
+    case 'Supporto Tecnico': return 'supportoTecnico';
+    case 'Segreteria Generale': return 'segreteria';
+    default: return 'outline';
   }
 };
 
 // --- HOOK ---
-onMounted(() => {
-  fetchProcessedEmails();
+onMounted(async () => {
+  await fetchProcessedEmails();
 });
 </script>
 
 <template>
   <div class="container mx-auto p-4 md:p-8 space-y-8">
-    <!-- Componente per mostrare le notifiche -->
     <Toaster />
 
-    <!-- Rimosso: Card per l'invio manuale -->
-    <!-- Qui era presente la Card per il test manuale -->
+    <h1 class="text-2xl font-bold mb-4">Gestione Email Intelligente</h1>
 
-    <!-- Card per la posta smistata -->
+    <!-- SEZIONE: INFOGRAFICA (CARTE GRANDI IN ALTO, SOLO TITOLO E NUMERO) -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <Card class="bg-gradient-to-br from-blue-50 to-gray-100">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-gray-800">
+          <CardTitle class="text-sm font-medium">
+            Email Totali
+          </CardTitle>
+          <Mail class="h-4 w-4 text-gray-700" />
+        </CardHeader>
+        <CardContent class="text-gray-800">
+          <div class="text-2xl font-bold">
+            {{ totalEmailsCount }}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card class="bg-gradient-to-br from-rose-200 to-red-400">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
+          <CardTitle class="text-sm font-medium">
+            Email ContabilitÃ 
+          </CardTitle>
+          <Calculator class="h-4 w-4 text-gray-800" />
+        </CardHeader>
+        <CardContent class="text-black">
+          <div class="text-2xl font-bold">
+            {{ forwardedToContabilitaCount }}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card class="bg-gradient-to-br from-lime-200 to-green-400">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
+          <CardTitle class="text-sm font-medium">
+            Email Supporto Tecnico
+          </CardTitle>
+          <Settings class="h-4 w-4 text-gray-800" />
+        </CardHeader>
+        <CardContent class="text-black">
+          <div class="text-2xl font-bold">
+            {{ forwardedToSupportoTecnicoCount }}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card class="bg-gradient-to-br from-purple-200 to-fuchsia-300">
+        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
+          <CardTitle class="text-sm font-medium">
+            Email Segreteria
+          </CardTitle>
+          <Calendar class="h-4 w-4 text-gray-800" />
+        </CardHeader>
+        <CardContent class="text-black">
+          <div class="text-2xl font-bold">
+            {{ forwardedToSegreteriaCount }}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+    <!-- FINE SEZIONE INFOGRAFICA -->
+
+    <!-- Pulsante "Aggiungi Dipendente/Ufficio" (allineato a destra) -->
+    <div class="flex justify-end mb-4">
+      <Button variant="outline" @click="showAddStaffDialog = true" class="shrink-0">
+        <Users class="h-4 w-4 mr-2" />
+        Aggiungi Dipendente/Ufficio
+      </Button>
+    </div>
+
     <Card>
       <CardHeader>
         <CardTitle>Posta Smistata dall'AI</CardTitle>
-        <CardDescription>Elenco delle email analizzate e assegnate a un dipartimento/responsabile.</CardDescription>
+        <CardDescription>Elenco delle email analizzate e assegnate a un dipartimento responsabile.</CardDescription>
       </CardHeader>
       <CardContent>
-        <!-- NUOVO: Filtri e pulsante Aggiorna -->
-        <div class="flex flex-col md:flex-row items-start md:items-center justify-between space-y-2 md:space-y-0 md:space-x-4 mb-4">
-          <div class="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'all' }"
-              @click="activeFilter = 'all'"
-            >
-              Tutti ({{ processedEmails.length }})
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'new' }"
-              @click="activeFilter = 'new'"
-            >
-              Nuove ({{ processedEmails.filter(e => e.status === 'new').length }})
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              :class="{ 'bg-primary text-primary-foreground': activeFilter === 'forwarded' }"
-              @click="activeFilter = 'forwarded'"
-            >
-              Inoltrate ({{ processedEmails.filter(e => e.status === 'forwarded').length }})
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              :class="{ 'bg-destructive': activeFilter === 'problems' }"
-              @click="activeFilter = 'problems'"
-            >
-              Problemi ({{ processedEmails.filter(e => ['manual_review', 'ai_error', 'forward_error'].includes(e.status)).length }})
-            </Button>
-          </div>
+        <!-- TOOLBAR: SOLO PULSANTE AGGIORNA ALLINEATO A DESTRA (FILTRI RIMOSSI) -->
+        <div class="flex justify-end mb-4">
           <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
-            <!-- Icona Aggiorna (Refresh) -->
-            <svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004 9V4m0 0l2.5-2.5M4 4l-2.5 2.5m1.5 8h-1.5m0 0v-5h-.582m15.356 2A8.001 8.001 0 0120 15v5m0 0l-2.5 2.5m2.5-2.5l2.5-2.5"></path>
-            </svg>
+            <RefreshCw class="h-4 w-4 mr-2" />
             Aggiorna
           </Button>
         </div>
 
-        <div v-if="isLoading" class="text-center py-16"><p>Caricamento storico...</p></div>
-        <div v-else-if="filteredEmails.length > 0"> <!-- MODIFICA: USA filteredEmails -->
+        <!-- Stato di Caricamento/Vuoto della Tabella -->
+        <div v-if="isLoading" class="text-center py-16">
+          <p class="text-muted-foreground">Caricamento storico email...</p>
+        </div>
+        <div v-else-if="filteredEmails.length > 0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Mittente & Oggetto</TableHead>
                 <TableHead>Etichetta (Assegnato A)</TableHead>
                 <TableHead class="text-center">Confidenza AI</TableHead>
-                <TableHead class="text-center">Stato</TableHead> <!-- NUOVA COLONNA PER LO STATO -->
+                <TableHead class="text-center">Stato</TableHead>
                 <TableHead class="text-right">Ricevuta il</TableHead>
                 <TableHead class="text-center">Contenuto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="email in filteredEmails" :key="email.id"> <!-- MODIFICA: USA filteredEmails -->
+              <TableRow v-for="email in filteredEmails" :key="email.id">
                 <TableCell class="font-medium">
                   <div>{{ email.sender }}</div>
                   <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
                 </TableCell>
                 <TableCell>
-                  <!-- Badge per Assegnato A - se staff.name Ã¨ vuoto, usa un badge 'Non Assegnato' -->
-                  <Badge :variant="email.staff?.name ? 'outline' : 'secondary'">
+                  <Badge :variant="getStaffBadgeVariant(email.staff?.name)">
                     {{ email.staff?.name || 'Non Assegnato' }}
                   </Badge>
                 </TableCell>
                 <TableCell class="text-center">
-                  <!-- Badge per Confidenza AI con colori diversi -->
                   <Badge :variant="getConfidenceVariant(email.ai_confidence_score)">
                     {{ email.ai_confidence_score !== null && email.ai_confidence_score !== undefined ? (email.ai_confidence_score * 100).toFixed(0) + '%' : 'N/D' }}
                   </Badge>
                 </TableCell>
-                <TableCell class="text-center"> <!-- NUOVA CELLA PER LO STATO -->
-                  <Badge :variant="getStatusVariant(email.status)">
+                <TableCell class="text-center">
+                  <span>
                     {{ getStatusLabel(email.status) }}
-                  </Badge>
+                  </span>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
                 <TableCell class="text-center">
-                   <Button @click="viewEmailContent(email)" variant="ghost" size="sm">Visualizza</Button>
+                   <Button
+                     @click="viewEmailContent(email)"
+                     size="sm"
+                     variant="black"
+                   >
+                     Visualizza
+                   </Button>
                 </TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </div>
-        <div v-else class="text-center py-16"><p class="text-muted-foreground">Nessuna email trovata per il filtro selezionato.</p></div>
+        <div v-else class="text-center py-16">
+          <p class="text-muted-foreground">Nessuna email trovata per il filtro selezionata.</p>
+          <p class="text-muted-foreground text-sm mt-2">Le email vengono elaborate automaticamente ogni 5 minuti.</p>
+        </div>
       </CardContent>
     </Card>
     
     <!-- Modale per visualizzare contenuto email -->
     <Dialog :open="showContentModal" @update:open="showContentModal = false">
-      <DialogContent v-if="selectedEmailContent">
+      <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
           <DialogHeader>
               <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
               <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
@@ -1592,6 +1816,46 @@ onMounted(() => {
           </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <!-- Modale per Aggiungere Nuovo Dipendente/Ufficio -->
+    <Dialog :open="showAddStaffDialog" @update:open="showAddStaffDialog = $event">
+      <DialogContent class="dialog-content-force-white">
+        <DialogHeader>
+          <DialogTitle>Aggiungi Nuovo Dipendente/Ufficio</DialogTitle>
+          <DialogDescription>
+            Inserisci i dettagli del nuovo membro dello staff o del nuovo ufficio.
+          </DialogDescription>
+        </DialogHeader>
+        <form> <!-- RIMOSSO @submit.prevent dal form -->
+          <div class="grid gap-4 py-4">
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="name" class="text-right">
+                Nome Ufficio / Dipendente
+              </Label>
+              <Input id="name" v-model="newStaffForm.name" required class="col-span-3" />
+            </div>
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="email" class="text-right">
+                Email
+              </Label>
+              <Input id="email" type="email" v-model="newStaffForm.email" required class="col-span-3" />
+            </div>
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="responsibilities" class="text-right">
+                ResponsabilitÃ 
+              </Label>
+              <Textarea id="responsibilities" v-model="newStaffForm.responsibilities" required class="col-span-3" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" @click="showAddStaffDialog = false">Annulla</Button>
+            <!-- COLLEGATO addStaff direttamente all'evento @click -->
+            <Button type="button" @click="addStaff">Aggiungi</Button> 
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
   </div>
 </template>
 
@@ -1635,6 +1899,72 @@ export default defineEventHandler(async (event) => {
 
   if (error) throw createError({ statusCode: 500, statusMessage: error.message });
   return data;
+});
+
+
+================================================
+FILE: server/api/staff.get.js
+================================================
+// server/api/staff.get.js
+
+import { defineEventHandler } from 'h3';
+import { serverSupabaseClient } from '#supabase/server';
+
+export default defineEventHandler(async (event) => {
+  const supabase = await serverSupabaseClient(event);
+
+  const { data, error } = await supabase
+    .from('staff')
+    .select('id, name, email, responsibilities')
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.error('Supabase staff fetch error:', error.message);
+    throw createError({ statusCode: 500, statusMessage: error.message });
+  }
+
+  return data;
+});
+
+
+================================================
+FILE: server/api/staff.post.js
+================================================
+// server/api/staff.post.js
+
+import { defineEventHandler, readBody, createError } from 'h3';
+import { getSupabaseAdminClient } from '../utils/supabaseAdmin'; // PERCORSO CORRETTO
+
+export default defineEventHandler(async (event) => {
+  const supabaseAdmin = getSupabaseAdminClient();
+  const body = await readBody(event);
+  const { name, email, responsibilities } = body;
+
+  if (!name || !email || !responsibilities) {
+    throw createError({ statusCode: 400, statusMessage: 'Nome, email e responsabilitÃ  sono campi obbligatori.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('staff')
+      .insert({
+        name: name,
+        email: email,
+        responsibilities: responsibilities,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase staff insert error:', error.message);
+      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiunta del dipendente: ${error.message}` });
+    }
+
+    return { status: 'success', message: 'Dipendente aggiunto con successo!', data: data };
+  } catch (e) {
+    console.error('Errore nel processare la richiesta POST per staff:', e);
+    throw createError({ statusCode: e.statusCode || 500, statusMessage: e.statusMessage || 'Errore interno del server.' });
+  }
 });
 
 
@@ -1868,10 +2198,7 @@ export default defineEventHandler(async (event) => {
 FILE: server/plugins/scheduler.js
 ================================================
 // server/plugins/scheduler.js
-// Rimuovi l'import di node-cron
-// import * as cron from 'node-cron'; 
-
-import { Cron } from 'croner'; // <-- Importa Cron da croner (senza CronOptions)
+import { Cron } from 'croner';
 import { processNewIncomingEmails } from '../utils/mailProcessor';
 
 export default defineNitroPlugin(async (nitroApp) => {
@@ -1888,17 +2215,20 @@ export default defineNitroPlugin(async (nitroApp) => {
     console.error('Error during initial email processing run:', error);
   }
 
-
-  console.log('Email processing scheduler started and scheduled to run every 5 minutes.');
+  // Programma l'esecuzione periodica della funzione di elaborazione email.
+  console.log('Email processing scheduler started and scheduled to run every  minute.');
   
-  Cron('*/5 * * * *', async () => {
-    console.log('Running scheduled email processing (every 5 minutes)...');
+  // *** MODIFICA QUI: Aggiungi "new" prima di Cron() ***
+  new Cron('*/1 * * * *', async () => { 
+    console.log('Running scheduled email processing (every  minute)...');
     try {
       await processNewIncomingEmails();
     } catch (error) {
       console.error('Error during scheduled email processing run:', error);
     }
-  }, { timezone: 'Europe/Rome' }); 
+  }, { timezone: 'Europe/Rome' });
+
+
 });
 
 

@@ -17,11 +17,11 @@ export default defineNitroPlugin(async (nitroApp) => {
   }
 
   // Programma l'esecuzione periodica della funzione di elaborazione email.
-  console.log('Email processing scheduler started and scheduled to run every  minute.');
+  console.log('Email processing scheduler started and scheduled to run every 5 minutes.');
   
   // *** MODIFICA QUI: Aggiungi "new" prima di Cron() ***
-  new Cron('*/1 * * * *', async () => { 
-    console.log('Running scheduled email processing (every  minute)...');
+  new Cron('*/5 * * * *', async () => { 
+    console.log('Running scheduled email processing (every 5 minutes)...');
     try {
       await processNewIncomingEmails();
     } catch (error) {

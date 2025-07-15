@@ -1,7 +1,7 @@
 // server/api/staff.post.js
 
 import { defineEventHandler, readBody, createError } from 'h3';
-import { getSupabaseAdminClient } from '../utils/supabaseAdmin'; // PERCORSO CORRETTO
+import { getSupabaseAdminClient } from '../utils/supabaseAdmin';
 
 export default defineEventHandler(async (event) => {
   const supabaseAdmin = getSupabaseAdminClient();
@@ -25,7 +25,14 @@ export default defineEventHandler(async (event) => {
 
     if (error) {
       console.error('Supabase staff insert error:', error.message);
-      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiunta del dipendente: ${error.message}` });
+      
+      let statusMessage = `Errore durante l'aggiunta del dipendente: ${error.message}`;
+      // Intercetta l'errore di violazione di unicitÃ  (codice PostgreSQL 23505)
+      if (error.code === '23505' && error.message.includes('staff_email_key')) {
+        statusMessage = 'Un dipendente/ufficio con questa email esiste già. Si prega di usare un\'email unica.';
+      }
+      
+      throw createError({ statusCode: 500, statusMessage: statusMessage });
     }
 
     return { status: 'success', message: 'Dipendente aggiunto con successo!', data: data };

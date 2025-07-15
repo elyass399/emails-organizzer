@@ -79,7 +79,7 @@ export async function analyzeEmailWithAI(sender, subject, body_text) {
         assigned_to_staff_id: finalAssignedId,
         ai_confidence_score: parseFloat(aiResponse.ai_confidence_score) || 0,
         ai_reasoning: aiResponse.ai_reasoning,
-        assignedStaffEmail: bestMatchStaff?.email || null, // Aggiungiamo l'email dello staff qui
+        assignedStaffEmail: bestMatchStaff?.email || null, 
         assignedStaffName: bestMatchStaff?.name || null,
     };
 }
