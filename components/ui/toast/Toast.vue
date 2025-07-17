@@ -8,7 +8,8 @@ const props = defineProps</* @vue-ignore */ ToastProps>() // Aggiungi qui
 
 const emits = defineEmits<ToastRootEmits>()
 
-const delegatedProps = reactiveOmit(props, 'class')
+// Passa solo le props che ToastRoot di reka-ui si aspetta, escludendo quelle aggiuntive per use-toast
+const delegatedProps = reactiveOmit(props, 'class', 'title', 'description', 'action')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
@@ -17,7 +18,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
   <ToastRoot
     v-bind="forwarded"
     :class="cn(toastVariants({ variant }), props.class)"
-    @update:open="onOpenChange"
+    @update:open="props.onOpenChange"
   >
     <slot />
   </ToastRoot>

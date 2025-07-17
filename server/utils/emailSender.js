@@ -5,7 +5,8 @@ import { useRuntimeConfig } from '#imports';
 const config = useRuntimeConfig();
 sgMail.setApiKey(config.sendgridApiKey);
 
-export async function sendEmail(to, fromName, fromAddress, subject, originalBody, aiReasoning) {
+// AGGIUNTA DI UN NUOVO PARAMETRO 'attachments'
+export async function sendEmail(to, fromName, fromAddress, subject, originalBody, aiReasoning, attachments = []) {
   const SENDER_EMAIL = config.senderEmail; // L'email verificata in SendGrid (test@aitaky.it)
 
   const htmlBody = `
@@ -30,6 +31,7 @@ export async function sendEmail(to, fromName, fromAddress, subject, originalBody
     subject: `[Smistato da AI] ${subject}`,
     html: htmlBody,
     replyTo: fromAddress, // Permette di rispondere direttamente al cliente originale
+    attachments: attachments // PASSIAMO GLI ALLEGATI A SENDGRID QUI
   };
 
   try {
@@ -37,6 +39,10 @@ export async function sendEmail(to, fromName, fromAddress, subject, originalBody
     console.log(`Email inoltrata con successo a ${to} tramite SendGrid.`);
   } catch (error) {
     console.error("Errore durante l'inoltro con SendGrid:", error.response?.body || error.message);
+    // Puoi anche loggare dettagli specifici se l'errore è un SendGridError (es. allegati troppo grandi)
+    if (error.response && error.response.body && error.response.body.errors) {
+        error.response.body.errors.forEach(e => console.error(`SendGrid Error Detail: ${e.message}`));
+    }
     throw error; // Rilancia l'errore per gestirlo nel chiamante
   }
 }

@@ -15,23 +15,44 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
 
-// Importa le icone necessarie per l'infografica e per il pulsante Aggiorna
-import { Mail, RefreshCw, Calculator, Settings, Calendar, Users } from 'lucide-vue-next';
+// Importa le icone necessarie per il refresh e i bottoni staff
+// MODIFICA QUI: Aggiunto AlertTriangle
+import { RefreshCw, Users, Edit, List, AlertTriangle } from 'lucide-vue-next';
 
 
 // --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true);
-const showAddStaffDialog = ref(false);
+const isLoadingEmails = ref(true); // Rinominato per chiarezza
 
-// Form per aggiungere nuovo staff
+// Stato per la modale di AGGIUNTA staff
+const showAddStaffDialog = ref(false);
 const newStaffForm = reactive({
   name: '',
   email: '',
-  responsibilities: '',
+  text_skills: '',
 });
+
+// Stato e dati per la modale di MODIFICA staff centralizzata
+const showUpdateStaffDialog = ref(false);
+const allStaffMembers = ref([]); // Lista completa dei dipendenti/uffici per la dropdown
+const selectedStaffIdToUpdate = ref(null); // ID del dipendente selezionato nella dropdown
+
+const updateStaffForm = reactive({ // Form per la modifica del testo delle skills
+  text_skills: '',
+});
+
+// Stato per la modale di VISUALIZZAZIONE staff
+const showViewStaffDialog = ref(false); // NUOVO STATO PER LA NUOVA MODALE
+const isLoadingStaff = ref(true);
+
+
+// Computed per ottenere il nome e l'email del dipendente selezionato nella modale di modifica
+const currentSelectedStaff = computed(() => {
+  return allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value) || {};
+});
+
 
 const activeFilter = ref('all');
 
@@ -45,21 +66,10 @@ const filteredEmails = computed(() => {
   return processedEmails.value;
 });
 
-const totalEmailsCount = computed(() => processedEmails.value ? processedEmails.value.length : 0);
-const forwardedToContabilitaCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Ufficio Contabilità').length;
-});
-const forwardedToSupportoTecnicoCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Supporto Tecnico').length;
-});
-const forwardedToSegreteriaCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Segreteria Generale').length;
-});
-
 
 // --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
-  isLoading.value = true;
+  isLoadingEmails.value = true;
   try {
     const data = await $fetch('/api/inbox');
     processedEmails.value = data || [];
@@ -74,9 +84,47 @@ const fetchProcessedEmails = async () => {
     processedEmails.value = [];
   }
   finally {
-    isLoading.value = false;
+    isLoadingEmails.value = false;
   }
 };
+
+// Funzione: Carica la lista completa dello staff
+const fetchAllStaff = async () => {
+  isLoadingStaff.value = true; // Aggiunto per gestire lo stato di caricamento della lista staff
+  try {
+    const data = await $fetch('/api/staff');
+    allStaffMembers.value = data || [];
+    // Imposta il primo staff come selezionato di default per la modale di modifica, se esiste
+    if (allStaffMembers.value.length > 0) {
+      selectedStaffIdToUpdate.value = allStaffMembers.value[0].id;
+      updateStaffForm.text_skills = allStaffMembers.value[0].text_skills;
+    } else {
+      selectedStaffIdToUpdate.value = null;
+      updateStaffForm.text_skills = '';
+    }
+  } catch (error) {
+    console.error("Impossibile caricare la lista staff:", error);
+    toast({
+      title: 'Errore',
+      description: 'Impossibile caricare la lista dei dipendenti/uffici.',
+      variant: 'destructive',
+    });
+    allStaffMembers.value = [];
+  } finally {
+    isLoadingStaff.value = false;
+  }
+};
+
+// Funzione per gestire la selezione di un dipendente nella dropdown di modifica
+const handleStaffSelectionChange = () => {
+  const selectedStaff = allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value);
+  if (selectedStaff) {
+    updateStaffForm.text_skills = selectedStaff.text_skills;
+  } else {
+    updateStaffForm.text_skills = '';
+  }
+};
+
 
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
@@ -84,31 +132,51 @@ const viewEmailContent = (email) => {
 };
 
 const addStaff = async () => {
-  console.log('addStaff function called'); // Lasciamo il log per verifica
+  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI (per addStaff) ---
+  console.log('Frontend: addStaff function called on submit.');
+  console.log('Frontend: newStaffForm data:', {
+    name: newStaffForm.name,
+    email: newStaffForm.email,
+    text_skills: newStaffForm.text_skills
+  });
+
+  if (!newStaffForm.name || !newStaffForm.email || !newStaffForm.text_skills || newStaffForm.text_skills.trim() === '') {
+    toast({
+      title: 'Errore',
+      description: 'Nome, email e descrizione competenze sono campi obbligatori e non possono essere vuoti.',
+      variant: 'destructive',
+    });
+    console.error('Frontend: Errore: Campi addStaff mancanti/vuoti.');
+    return;
+  }
+  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
+
   try {
     const response = await $fetch('/api/staff', {
       method: 'POST',
       body: newStaffForm,
     });
-    
+
     if (response.status === 'success') {
       toast({
         title: 'Successo!',
         description: 'Dipendente aggiunto e salvato nel database.',
       });
       showAddStaffDialog.value = false;
-      Object.assign(newStaffForm, { name: '', email: '', responsibilities: '' });
+      Object.assign(newStaffForm, { name: '', email: '', text_skills: '' });
       await fetchProcessedEmails();
-
+      await fetchAllStaff(); // Aggiorna la lista staff per tutte le modali
+      console.log('Frontend: Aggiunta staff completata con successo.');
     } else {
       toast({
         title: 'Errore',
         description: response.message || 'Errore durante l\'aggiunta del dipendente.',
         variant: 'destructive',
       });
+      console.error('Frontend: Errore risposta API addStaff:', response.message);
     }
   } catch (error) {
-    console.error('Errore durante l\'aggiunta del dipendente:', error);
+    console.error('Frontend: Errore durante l\'aggiunta del dipendente:', error);
     toast({
       title: 'Errore',
       description: error.data?.statusMessage || 'Si è verificato un errore imprevisto.',
@@ -116,6 +184,89 @@ const addStaff = async () => {
     });
   }
 };
+
+// Funzione per aprire la modale di AGGIORNAMENTO STAFF centralizzata
+const openCentralUpdateStaffDialog = async () => {
+  await fetchAllStaff(); // Carica sempre la lista piÃ¹ recente
+  showUpdateStaffDialog.value = true;
+};
+
+// NUOVA FUNZIONE: per aprire la modale di VISUALIZZAZIONE STAFF
+const openViewStaffDetailsDialog = async () => {
+  await fetchAllStaff(); // Carica sempre la lista piÃ¹ recente
+  showViewStaffDialog.value = true;
+};
+
+
+const updateStaff = async () => {
+  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI ---
+  console.log('Frontend: updateStaff function called.');
+  console.log('Frontend: selectedStaffIdToUpdate:', selectedStaffIdToUpdate.value);
+  console.log('Frontend: updateStaffForm.text_skills:', updateStaffForm.text_skills);
+
+  if (!selectedStaffIdToUpdate.value) {
+    toast({
+      title: 'Errore',
+      description: 'Nessun dipendente selezionato per l\'aggiornamento.',
+      variant: 'destructive',
+    });
+    console.error('Frontend: Errore: Nessun dipendente selezionato.');
+    return;
+  }
+
+  if (!updateStaffForm.text_skills || updateStaffForm.text_skills.trim() === '') {
+    toast({
+      title: 'Errore',
+      description: 'Il campo "Descrizione Competenze" non può essere vuoto.',
+    });
+    console.error('Frontend: Errore: Il campo Descrizione Competenze Ã¨ vuoto.');
+    return;
+  }
+  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
+
+
+  console.log('updateStaff function called for ID:', selectedStaffIdToUpdate.value);
+  try {
+    // --- LOG AGGIUNTO QUI PRIMA DELLA CHIAMATA FETCH ---
+    console.log('Frontend: Tentativo di inviare richiesta PUT per aggiornare staff...');
+    console.log('Frontend: URL della richiesta:', `/api/staff/${selectedStaffIdToUpdate.value}`);
+    console.log('Frontend: Body della richiesta:', { text_skills: updateStaffForm.text_skills });
+    // --- FINE LOG AGGIUNTO QUI ---
+
+    const response = await $fetch(`/api/staff/${selectedStaffIdToUpdate.value}`, {
+      method: 'PUT',
+      body: {
+        text_skills: updateStaffForm.text_skills, // Inviamo solo il campo modificabile
+      },
+    });
+
+    if (response.status === 'success') {
+      toast({
+        title: 'Successo!',
+        description: 'Competenze del dipendente aggiornate e ricalcolate.',
+      });
+      showUpdateStaffDialog.value = false;
+      await fetchProcessedEmails(); // Ricarica tutte le email per riflettere le modifiche
+      await fetchAllStaff(); // Ricarica la lista staff per sicurezza
+      console.log('Frontend: Aggiornamento staff completato con successo.');
+    } else {
+      toast({
+        title: 'Errore',
+        description: response.message || 'Errore durante l\'aggiornamento delle competenze.',
+        variant: 'destructive',
+      });
+      console.error('Frontend: Errore risposta API:', response.message);
+    }
+  } catch (error) {
+    console.error('Frontend: Errore durante l\'aggiornamento delle competenze:', error);
+    toast({
+      title: 'Errore',
+      description: error.data?.statusMessage || 'Si è verificato un errore imprevisto.',
+      variant: 'destructive',
+    });
+  }
+};
+
 
 // --- FUNZIONI UTILI PER LA GRAFICA E I BADGE ---
 const formatDate = (dateString) => {
@@ -141,18 +292,33 @@ const getStatusLabel = (status) => {
     case 'manual_review': return 'Revisione Manuale';
     case 'ai_error': return 'Errore AI';
     case 'forward_error': return 'Errore Inoltro';
+    case 'processing_error': return 'Errore Elaborazione';
     default: return status;
   }
 };
 
 const getStaffBadgeVariant = (staffName) => {
-  switch (staffName) {
-    case 'Ufficio Contabilità': return 'contabilita';
-    case 'Supporto Tecnico': return 'supportoTecnico';
-    case 'Segreteria Generale': return 'segreteria';
-    default: return 'outline';
-  }
+  // Ritorna sempre la variante 'secondary' per i badge dello staff
+  return 'secondary';
 };
+
+// NUOVA FUNZIONE per ottenere le classi CSS per le righe urgenti
+const getRowUrgencyClass = (isUrgent) => {
+  return isUrgent ? 'border-l-4 border-red-500 bg-red-50' : '';
+};
+
+// NUOVA FUNZIONE per ottenere il badge di urgenza
+const getUrgencyBadge = (isUrgent) => {
+  if (isUrgent) {
+    return {
+      text: 'URGENTE',
+      variant: 'destructive', // Usa la variante 'destructive' per il badge rosso
+      icon: AlertTriangle // L'icona del triangolo d'allerta
+    };
+  }
+  return null; // Restituisce null se non Ã¨ urgente
+};
+
 
 // --- HOOK ---
 onMounted(async () => {
@@ -166,71 +332,20 @@ onMounted(async () => {
 
     <h1 class="text-2xl font-bold mb-4">Gestione Email Intelligente</h1>
 
-    <!-- SEZIONE: INFOGRAFICA (CARTE GRANDI IN ALTO, SOLO TITOLO E NUMERO) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <Card class="bg-gradient-to-br from-blue-50 to-gray-100">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-gray-800">
-          <CardTitle class="text-sm font-medium">
-            Email Totali
-          </CardTitle>
-          <Mail class="h-4 w-4 text-gray-700" />
-        </CardHeader>
-        <CardContent class="text-gray-800">
-          <div class="text-2xl font-bold">
-            {{ totalEmailsCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-rose-200 to-red-400">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email Contabilità
-          </CardTitle>
-          <Calculator class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToContabilitaCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-lime-200 to-green-400">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email Supporto Tecnico
-          </CardTitle>
-          <Settings class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToSupportoTecnicoCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-purple-200 to-fuchsia-300">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email Segreteria
-          </CardTitle>
-          <Calendar class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToSegreteriaCount }}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-    <!-- FINE SEZIONE INFOGRAFICA -->
-
-    <!-- Pulsante "Aggiungi Dipendente/Ufficio" (allineato a destra) -->
-    <div class="flex justify-end mb-4">
+    <!-- Pulsanti "Aggiungi", "Modifica" e "Visualizza" Dipendente/Ufficio (allineati a destra) -->
+    <div class="flex justify-end gap-2 mb-4">
       <Button variant="outline" @click="showAddStaffDialog = true" class="shrink-0">
         <Users class="h-4 w-4 mr-2" />
         Aggiungi Dipendente/Ufficio
+      </Button>
+      <Button variant="outline" @click="openCentralUpdateStaffDialog" class="shrink-0">
+        <Edit class="h-4 w-4 mr-2" />
+        Modifica Dipendente/Ufficio
+      </Button>
+      <!-- NUOVO BOTTONE PER VISUALIZZARE STAFF -->
+      <Button variant="outline" @click="openViewStaffDetailsDialog" class="shrink-0">
+        <List class="h-4 w-4 mr-2" />
+        Visualizza Dipendenti/Uffici
       </Button>
     </div>
 
@@ -242,22 +357,22 @@ onMounted(async () => {
       <CardContent>
         <!-- TOOLBAR: SOLO PULSANTE AGGIORNA ALLINEATO A DESTRA (FILTRI RIMOSSI) -->
         <div class="flex justify-end mb-4">
-          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
+          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoadingEmails" class="shrink-0">
             <RefreshCw class="h-4 w-4 mr-2" />
             Aggiorna
           </Button>
         </div>
 
         <!-- Stato di Caricamento/Vuoto della Tabella -->
-        <div v-if="isLoading" class="text-center py-16">
+        <div v-if="isLoadingEmails" class="text-center py-16">
           <p class="text-muted-foreground">Caricamento storico email...</p>
         </div>
         <div v-else-if="filteredEmails.length > 0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Mittente & Oggetto</TableHead>
-                <TableHead>Etichetta (Assegnato A)</TableHead>
+                <TableHead class="text-left">Mittente</TableHead>
+                <TableHead class="text-center">Assegnato A</TableHead>
                 <TableHead class="text-center">Confidenza AI</TableHead>
                 <TableHead class="text-center">Stato</TableHead>
                 <TableHead class="text-right">Ricevuta il</TableHead>
@@ -265,12 +380,22 @@ onMounted(async () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="email in filteredEmails" :key="email.id">
-                <TableCell class="font-medium">
-                  <div>{{ email.sender }}</div>
-                  <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+              <TableRow
+                v-for="email in filteredEmails"
+                :key="email.id"
+                :class="getRowUrgencyClass(email.is_urgent)"
+              >
+                <TableCell class="font-medium text-left">
+                  <!-- NUOVA PARTE: Icona di urgenza accanto al mittente -->
+                  <div class="flex items-center gap-2">
+                    <AlertTriangle v-if="email.is_urgent" class="h-4 w-4 text-red-600" title="Email Urgente" />
+                    <div>
+                      <div>{{ email.sender }}</div>
+                      <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+                    </div>
+                  </div>
                 </TableCell>
-                <TableCell>
+                <TableCell class="text-center">
                   <Badge :variant="getStaffBadgeVariant(email.staff?.name)">
                     {{ email.staff?.name || 'Non Assegnato' }}
                   </Badge>
@@ -281,9 +406,13 @@ onMounted(async () => {
                   </Badge>
                 </TableCell>
                 <TableCell class="text-center">
-                  <span>
-                    {{ getStatusLabel(email.status) }}
-                  </span>
+                  <div class="flex flex-col items-center gap-1">
+                    <span>{{ getStatusLabel(email.status) }}</span>
+                    <!-- NUOVA PARTE: Badge di urgenza sotto lo stato -->
+                    <Badge v-if="getUrgencyBadge(email.is_urgent)" :variant="getUrgencyBadge(email.is_urgent).variant">
+                      {{ getUrgencyBadge(email.is_urgent).text }}
+                    </Badge>
+                  </div>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
                 <TableCell class="text-center">
@@ -305,22 +434,40 @@ onMounted(async () => {
         </div>
       </CardContent>
     </Card>
-    
+
     <!-- Modale per visualizzare contenuto email -->
-    <Dialog :open="showContentModal" @update:open="showContentModal = false">
-      <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
-          <DialogHeader>
-              <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
-              <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
-          </DialogHeader>
-          <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
-              {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
+    <!-- Modale per visualizzare contenuto email in pages/index.vue -->
+<Dialog :open="showContentModal" @update:open="showContentModal = false">
+  <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
+      <DialogHeader>
+          <DialogTitle>{{ selectedEmailContent.subject }}</DialogTitle>
+          <DialogDescription>Da: {{ selectedEmailContent.sender }}</DialogDescription>
+      </DialogHeader>
+      <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
+          {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
+
+          <!-- BLOCCO PER GLI ALLEGATI -->
+          <div v-if="selectedEmailContent.attachments && selectedEmailContent.attachments.length > 0" class="mt-4 border-t pt-4">
+            <h4 class="font-semibold mb-2">Allegati:</h4>
+            <ul class="list-disc pl-5">
+              <li v-for="attachment in selectedEmailContent.attachments" :key="attachment.public_url || attachment.filename">
+                <a :href="attachment.public_url" target="_blank" class="text-blue-600 hover:underline">
+                  {{ attachment.filename }} ({{ (attachment.size / 1024).toFixed(2) }} KB)
+                </a>
+              </li>
+            </ul>
           </div>
-          <DialogFooter>
-              <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
-          </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <!-- Icona di Urgenza nella Modale -->
+          <div v-if="selectedEmailContent.is_urgent" class="mt-4 flex items-center text-red-600 font-semibold">
+            <AlertTriangle class="h-5 w-5 mr-2" />
+            <span>Questa email Ã¨ stata classificata come URGENTE dall'AI.</span>
+          </div>
+      </div>
+      <DialogFooter>
+          <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
+      </DialogFooter>
+  </DialogContent>
+</Dialog>
 
     <!-- Modale per Aggiungere Nuovo Dipendente/Ufficio -->
     <Dialog :open="showAddStaffDialog" @update:open="showAddStaffDialog = $event">
@@ -331,7 +478,7 @@ onMounted(async () => {
             Inserisci i dettagli del nuovo membro dello staff o del nuovo ufficio.
           </DialogDescription>
         </DialogHeader>
-        <form> <!-- RIMOSSO @submit.prevent dal form -->
+        <form @submit.prevent="addStaff">
           <div class="grid gap-4 py-4">
             <div class="grid grid-cols-4 items-center gap-4">
               <Label for="name" class="text-right">
@@ -346,20 +493,139 @@ onMounted(async () => {
               <Input id="email" type="email" v-model="newStaffForm.email" required class="col-span-3" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <Label for="responsibilities" class="text-right">
-                Responsabilità
+              <Label for="textSkills" class="text-right">
+                Descrizione Competenze
               </Label>
-              <Textarea id="responsibilities" v-model="newStaffForm.responsibilities" required class="col-span-3" />
+              <Textarea id="textSkills" v-model="newStaffForm.text_skills" required class="col-span-3" />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" @click="showAddStaffDialog = false">Annulla</Button>
-            <!-- COLLEGATO addStaff direttamente all'evento @click -->
-            <Button type="button" @click="addStaff">Aggiungi</Button> 
+            <Button type="submit">Aggiungi</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+
+    <!-- Modale per Aggiornare Competenze Dipendente (Centralizzata) -->
+    <Dialog :open="showUpdateStaffDialog" @update:open="showUpdateStaffDialog = $event">
+      <DialogContent class="dialog-content-force-white">
+        <DialogHeader>
+          <DialogTitle>Modifica Competenze Dipendente/Ufficio</DialogTitle>
+          <DialogDescription>
+            Seleziona un dipendente/ufficio per aggiornare la descrizione delle sue competenze.
+          </DialogDescription>
+        </DialogHeader>
+        <form @submit.prevent="updateStaff">
+          <div class="grid gap-4 py-4">
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="staffSelect" class="text-right">
+                Seleziona Dipendente/Ufficio
+              </Label>
+              <select 
+                id="staffSelect" 
+                v-model="selectedStaffIdToUpdate" 
+                @change="handleStaffSelectionChange"
+                class="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                required
+              >
+                <option v-if="allStaffMembers.length === 0" value="" disabled>Nessun dipendente disponibile</option>
+                <option 
+                  v-for="staff in allStaffMembers" 
+                  :key="staff.id" 
+                  :value="staff.id"
+                >
+                  {{ staff.name }} ({{ staff.email }})
+                </option>
+              </select>
+            </div>
+
+            <!-- Campi nome e email visualizzati per il dipendente selezionato -->
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="selectedName" class="text-right">
+                Nome
+              </Label>
+              <Input id="selectedName" :model-value="currentSelectedStaff.name" readonly class="col-span-3 bg-gray-100 text-gray-600" />
+            </div>
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="selectedEmail" class="text-right">
+                Email
+              </Label>
+              <Input id="selectedEmail" :model-value="currentSelectedStaff.email" readonly class="col-span-3 bg-gray-100 text-gray-600" />
+            </div>
+
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="updateTextSkills" class="text-right">
+                Descrizione Competenze
+              </Label>
+              <Textarea id="updateTextSkills" v-model="updateStaffForm.text_skills" required class="col-span-3" />
+            </div>
+
+            <!-- Optional: Mostra le skills estratte dall'AI dopo l'update per verifica -->
+            <div v-if="currentSelectedStaff.skills && currentSelectedStaff.skills.length > 0" class="grid grid-cols-4 items-center gap-4">
+              <Label class="text-right">Skills estratte (AI)</Label>
+              <div class="col-span-3 flex flex-wrap gap-2">
+                <Badge v-for="skill in currentSelectedStaff.skills" :key="skill" variant="secondary">
+                  {{ skill }}
+                </Badge>
+              </div>
+            </div>
+             <div v-else class="grid grid-cols-4 items-center gap-4 text-sm text-muted-foreground">
+              <span class="col-span-4 text-right">Nessuna skill estratta (o ancora da elaborare).</span>
+            </div>
+
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" @click="showUpdateStaffDialog = false">Annulla</Button>
+            <Button type="submit" :disabled="!selectedStaffIdToUpdate">Salva Modifiche</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- NUOVA MODALE PER VISUALIZZARE DIPENDENTI/UFFICI -->
+    <Dialog :open="showViewStaffDialog" @update:open="showViewStaffDialog = $event">
+      <DialogContent class="dialog-content-force-white max-w-7xl w-11/12">
+        <DialogHeader>
+          <DialogTitle>Elenco Dipendenti/Uffici</DialogTitle>
+          <DialogDescription>
+            Dettagli di tutti i membri dello staff e delle loro competenze.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="isLoadingStaff" class="text-center py-8">
+          <p class="text-muted-foreground">Caricamento lista dipendenti...</p>
+        </div>
+        <div v-else-if="allStaffMembers.length > 0" class="max-h-[500px] overflow-y-auto overflow-x-auto">
+          <Table class="min-w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[20%] min-w-[150px]">Nome Ufficio / Dipendente</TableHead>
+                <TableHead class="w-[25%] min-w-[200px]">Email</TableHead>
+                <TableHead class="w-[55%] min-w-[300px]">Descrizione Competenze</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="staff in allStaffMembers" :key="staff.id">
+                <TableCell class="font-medium">{{ staff.name }}</TableCell>
+                <TableCell class="break-all">{{ staff.email }}</TableCell>
+                <TableCell class="text-sm">
+                  <div class="whitespace-normal break-words">{{ staff.text_skills }}</div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-else class="text-center py-8">
+          <p class="text-muted-foreground">Nessun dipendente/ufficio configurato.</p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" @click="showViewStaffDialog = false">Chiudi</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
 
   </div>
 </template>

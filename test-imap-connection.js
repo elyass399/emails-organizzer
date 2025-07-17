@@ -19,8 +19,16 @@ console.log('IMAP_PORT:', config.imapPort);
 console.log('IMAP_USERNAME:', config.imapUsername);
 // Non loggare la password per sicurezza
 
-// Attiva il debug verboso di node-imap (può essere molto dettagliato)
-Imap.debug = console.log;
+// Attiva il debug verboso di node-imap (puÃ² essere molto dettagliato)
+// Imap.debug = console.log; // Mantienilo commentato per un output piÃ¹ pulito, riattivalo solo se necessario
+
+console.log('IMAP Test Client Config being used:', {
+  user: config.imapUsername,
+  host: config.imapHost,
+  port: config.imapPort,
+  tls: true,
+  tlsOptsRejectUnauthorized: false // Esplicito per il log
+});
 
 const imap = new Imap({
   user: config.imapUsername,
@@ -28,11 +36,14 @@ const imap = new Imap({
   host: config.imapHost,
   port: config.imapPort,
   tls: true,
-  // *** IMPORTANTE: SOLO PER AMBIENTI DI SVILUPPO/TEST! ***
+  // *** ATTENZIONE CRITICA PER LA SICUREZZA IN PRODUZIONE ***
   // Questa opzione disabilita la verifica che il nome host del server IMAP
   // corrisponda al nome nel suo certificato SSL.
-  // È NECESSARIO se il tuo provider (es. Shellrent) usa un certificato generico.
-  // Espone a vulnerabilità MITM in produzione. RIMUOVILA se vai in produzione con un certificato valido!
+  // Ãˆ NECESSARIO se il tuo provider (es. Shellrent) usa un certificato generico
+  // (es. *.shared.hosting.com).
+  // Espone a vulnerabilitÃ  Man-in-the-Middle (MITM) in produzione.
+  // PER AMBIENTI DI PRODUZIONE, ASSICURATI DI AVERE UN CERTIFICATO SSL VALIDO
+  // E Rimuovi O Imposta a `true`: `tlsOpts: { rejectUnauthorized: true }`
   tlsOpts: { rejectUnauthorized: false }
 });
 
@@ -46,7 +57,6 @@ imap.once('ready', () => {
     }
     console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
 
-    // Cerca email non lette (UNSEEN)
     imap.search(['UNSEEN'], (err, uids) => {
       if (err) {
         console.error('IMAP: Error searching for emails:', err);
@@ -91,11 +101,10 @@ imap.once('ready', () => {
 
       f.once('end', () => {
         console.log('IMAP: Finished fetching messages.');
-        // Marca le email come lette, così non le rileggi sempre
         imap.addFlags(uids, ['\\Seen'], (flagErr) => {
           if (flagErr) console.error('IMAP: Error marking emails as seen:', flagErr);
           console.log('IMAP: Emails marked as seen.');
-          imap.end(); // Disconnettiti dall'IMAP
+          imap.end();
         });
       });
     });

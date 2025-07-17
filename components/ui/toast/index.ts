@@ -1,5 +1,5 @@
 import type { ToastRootProps } from 'reka-ui'
-import type { HTMLAttributes } from 'vue'
+import type { Component, HTMLAttributes, VNode } from 'vue' // Aggiunto VNode
 
 export { default as Toast } from './Toast.vue'
 export { default as ToastAction } from './ToastAction.vue'
@@ -13,10 +13,14 @@ export { toast, useToast } from './use-toast'
 
 import { cva, type VariantProps } from 'class-variance-authority'
 
+// MODIFICA QUI: Estendi da ToastRootProps e aggiungi le proprietÃ  che vengono passate dal `use-toast`
 export interface ToastProps extends /* @vue-ignore */ ToastRootProps {
   class?: HTMLAttributes['class']
   variant?: ToastVariants['variant']
-  onOpenChange?: ((value: boolean) => void) | undefined
+  // Proprietà aggiunte per compatibilità con ToasterToast in use-toast.ts
+  title?: string
+  description?: string | VNode | (() => VNode) // Deve essere compatibile con StringOrVNode
+  action?: Component // Componente per l'azione del toast
 }
 
 export const toastVariants = cva(
@@ -37,8 +41,10 @@ export const toastVariants = cva(
 
 type ToastVariants = VariantProps<typeof toastVariants>
 
-export interface ToastProps extends ToastRootProps {
-  class?: HTMLAttributes['class']
-  variant?: ToastVariants['variant']
-  onOpenChange?: ((value: boolean) => void) | undefined
-}
+// La definizione ToastProps qui sotto Ã¨ duplicata e meno specifica,
+// manteniamo quella superiore che Ã¨ piÃ¹ completa.
+// export interface ToastProps extends ToastRootProps {
+//   class?: HTMLAttributes['class']
+//   variant?: ToastVariants['variant']
+//   onOpenChange?: ((value: boolean) => void) | undefined
+// }

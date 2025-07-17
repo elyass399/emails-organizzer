@@ -3,23 +3,30 @@ import Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 
 export async function fetchNewEmails(config) {
+  console.log('IMAP Client Config for fetchNewEmails:', {
+    user: config.imapUsername,
+    host: config.imapHost,
+    port: config.imapPort,
+    tls: true,
+    tlsOptsRejectUnauthorized: false // Esplicito per il log
+  });
+
   const imap = new Imap({
     user: config.imapUsername,
     password: config.imapPassword,
     host: config.imapHost,
     port: config.imapPort,
     tls: true,
-    tlsOpts: { rejectUnauthorized: false } // Mantiene il bypass del certificato
+    tlsOpts: { rejectUnauthorized: false }
   });
 
-  // Flag per assicurarsi che la connessione venga chiusa una sola volta e in modo sicuro
-  let connectionState = 'connecting'; // 'connecting', 'ready', 'closed', 'error'
+  let connectionState = 'connecting';
   const endConnection = (error = null) => {
     if (connectionState === 'closed') {
-      return; // Già chiusa
+      return;
     }
     try {
-      if (imap.state !== 'disconnected') { // Tenta di chiudere solo se non è già disconnesso
+      if (imap.state !== 'disconnected') {
         imap.end();
       }
       connectionState = 'closed';
@@ -39,16 +46,14 @@ export async function fetchNewEmails(config) {
       connectionState = 'ready';
       console.log('IMAP: Connected successfully to the main client!');
 
-      // *** MODIFICA QUI: Sposta il gestore degli errori del socket qui dentro ***
-      // imap.client.socket dovrebbe essere definito una volta che la connessione è "ready"
-      if (imap.client && imap.client.socket) { // Aggiungi un controllo di sicurezza in più
+      if (imap.client && imap.client.socket) {
         imap.client.socket.on('error', (err) => {
           if (err.code === 'ECONNRESET') {
             console.warn('IMAP (Socket): Received ECONNRESET. This is often a benign post-operation disconnect.', err.message);
           } else {
             console.error('IMAP (Socket): Unhandled socket error:', err);
           }
-          endConnection(err); // Assicurati che la connessione venga terminata
+          endConnection(err);
         });
       } else {
           console.warn('IMAP: imap.client or imap.client.socket was not available after ready event. Socket error handling might be incomplete.');
@@ -57,40 +62,39 @@ export async function fetchNewEmails(config) {
       imap.openBox(config.imapMailbox, false, (err, box) => {
         if (err) {
           console.error('IMAP: Error opening mailbox:', err);
-          endConnection(err); // Chiudi la connessione in caso di errore
-          return reject(err); // Rifiuta la promise
+          endConnection(err);
+          return reject(err);
         }
         console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
 
         imap.search(['UNSEEN'], (err, uids) => {
           if (err) {
             console.error('IMAP: Error searching for emails:', err);
-            endConnection(err); // Chiudi la connessione in caso di errore
-            return reject(err); // Rifiuta la promise
+            endConnection(err);
+            return reject(err);
           }
 
           if (!uids || uids.length === 0) {
             console.log('IMAP: No new unseen emails.');
-            endConnection(); // Chiudi la connessione
-            return resolve([]); // Risolvi con array vuoto se non ci sono email
+            endConnection();
+            return resolve([]);
           }
 
           console.log(`IMAP: Found ${uids.length} unseen emails. Fetching them.`);
 
-          const fetchPromises = []; // Array per contenere le Promises di ogni singola email
+          const fetchPromises = [];
 
-          const f = imap.fetch(uids, { bodies: '', struct: true, markSeen: false }); // markSeen: false per marcare manualmente
+          // Assicurati che 'bodies: '' sia sufficiente per gli allegati, lo è per default con mailparser
+          const f = imap.fetch(uids, { bodies: '' });
 
           f.on('message', (msg, seqno) => {
             let buffer = '';
-            let currentUid; // Variabile per immagazzinare l'UID di questo specifico messaggio
+            let currentUid;
 
-            // Cattura l'UID appena gli attributi sono disponibili
             msg.once('attributes', (attrs) => {
               currentUid = attrs.uid;
             });
 
-            // Crea una Promise per il parsing di questo singolo messaggio
             const messagePromise = new Promise(messageResolve => {
               msg.on('body', (stream) => {
                 stream.on('data', (chunk) => {
@@ -99,8 +103,18 @@ export async function fetchNewEmails(config) {
                 stream.once('end', async () => {
                   try {
                     const parsed = await simpleParser(buffer);
-                    messageResolve({ // Risolvi la Promise del messaggio con i dati parsati
-                      uid: currentUid, // USA L'UID CATTURATO DAGLI ATTRIBUTI
+
+                    // --- NUOVI LOG PER DEBUG ALLEGATI ---
+                    console.log(`IMAP: Message #${seqno} parsed. Attachments count: ${parsed.attachments ? parsed.attachments.length : 0}`);
+                    if (parsed.attachments && parsed.attachments.length > 0) {
+                        parsed.attachments.forEach((att, i) => {
+                            console.log(`  Attachment ${i + 1}: Filename='${att.filename}', ContentType='${att.contentType}', Size=${att.size} bytes. Content (Buffer/Uint8Array) present: ${!!att.content && att.content.length > 0}`);
+                        });
+                    }
+                    // --- FINE NUOVI LOG ---
+
+                    messageResolve({
+                      uid: currentUid,
                       messageId: parsed.messageId,
                       from: parsed.from?.text,
                       to: parsed.to?.text,
@@ -108,16 +122,17 @@ export async function fetchNewEmails(config) {
                       text: parsed.text,
                       html: parsed.html,
                       date: parsed.date,
-                      raw: buffer
+                      raw: buffer,
+                      attachments: parsed.attachments || [] // Questa riga è corretta
                     });
                   } catch (parseErr) {
-                    console.error('Error parsing email:', parseErr);
-                    messageResolve(null); // Risolvi con null in caso di errore di parsing
+                    console.error('IMAP: Error parsing email:', parseErr);
+                    messageResolve(null);
                   }
                 });
               });
             });
-            fetchPromises.push(messagePromise); // Aggiungi la Promise di questo messaggio all'array
+            fetchPromises.push(messagePromise);
           });
 
           f.once('error', (fetchErr) => {
@@ -133,22 +148,21 @@ export async function fetchNewEmails(config) {
 
             if (parsedEmails.length > 0) {
               const validUidsToMark = parsedEmails.map(e => e.uid).filter(uid => uid !== undefined && uid !== null);
-              
+
               if (validUidsToMark.length > 0) {
                 try {
                   await new Promise((flagResolve, flagReject) => {
                     imap.addFlags(validUidsToMark, ['\\Seen'], (flagErr) => {
                       if (flagErr) {
                         console.error('IMAP: Error marking emails as seen:', flagErr);
-                        flagReject(flagErr); // Rifiuta la Promise interna se c'è un errore
+                        flagReject(flagErr);
                       } else {
                         console.log('IMAP: Valid emails marked as seen.');
-                        flagResolve(); // Risolvi la Promise interna
+                        flagResolve();
                       }
                     });
                   });
                 } catch (addFlagsError) {
-                  // Se addFlags fallisce, lo logghiamo ma non blocchiamo il flusso principale
                   console.error('IMAP: Failed to mark emails as seen due to:', addFlagsError);
                 }
                 endConnection();
@@ -168,17 +182,14 @@ export async function fetchNewEmails(config) {
       });
     });
 
-    // Gestore generale per errori IMAP (cattura eventi che non sono legati a specifici stream di fetch)
     imap.once('error', (err) => {
-      // Cattura ECONNRESET solo se la connessione non è già gestita altrove.
-      // A volte ECONNRESET avviene dopo la chiusura intenzionale del socket.
-      if (!connectionEnded && ['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(err.code) && connectionState === 'ready') {
+      if (['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(err.code) && connectionState === 'ready') {
         console.warn(`IMAP: Received a non-critical connection error (${err.code}). Ignoring as a potential post-operation issue.`, err.message);
-      } else if (!connectionEnded) { // Per altri errori non gestiti e se la connessione non è chiusa
+      } else {
         console.error('IMAP: Global connection error:', err);
         reject(err);
       }
-      endConnection(err); // Assicurati di chiudere la connessione
+      endConnection(err);
     });
 
     imap.once('end', () => {

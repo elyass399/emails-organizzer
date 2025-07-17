@@ -81,9 +81,11 @@ Directory structure:
         │   ├── inbox.get.js
         │   ├── staff.get.js
         │   ├── staff.post.js
-        │   └── emails/
-        │       ├── process.post.js
-        │       └── webhook.post.js
+        │   ├── emails/
+        │   │   ├── process.post.js
+        │   │   └── webhook.post.js
+        │   └── staff/
+        │       └── [id].put.js
         ├── plugins/
         │   └── scheduler.js
         └── utils/
@@ -91,6 +93,7 @@ Directory structure:
             ├── emailSender.js
             ├── imapClient.js
             ├── mailProcessor.js
+            ├── skillExtractor.js
             └── supabaseAdmin.js
 
 ================================================
@@ -306,7 +309,6 @@ FILE: package.json
 }
 
 
-
 ================================================
 FILE: tailwind.config.ts
 ================================================
@@ -425,8 +427,16 @@ console.log('IMAP_PORT:', config.imapPort);
 console.log('IMAP_USERNAME:', config.imapUsername);
 // Non loggare la password per sicurezza
 
-// Attiva il debug verboso di node-imap (puÃ² essere molto dettagliato)
-Imap.debug = console.log;
+// Attiva il debug verboso di node-imap (puÃƒÂ² essere molto dettagliato)
+// Imap.debug = console.log; // Mantienilo commentato per un output piÃƒÂ¹ pulito, riattivalo solo se necessario
+
+console.log('IMAP Test Client Config being used:', {
+  user: config.imapUsername,
+  host: config.imapHost,
+  port: config.imapPort,
+  tls: true,
+  tlsOptsRejectUnauthorized: false // Esplicito per il log
+});
 
 const imap = new Imap({
   user: config.imapUsername,
@@ -434,11 +444,14 @@ const imap = new Imap({
   host: config.imapHost,
   port: config.imapPort,
   tls: true,
-  // *** IMPORTANTE: SOLO PER AMBIENTI DI SVILUPPO/TEST! ***
+  // *** ATTENZIONE CRITICA PER LA SICUREZZA IN PRODUZIONE ***
   // Questa opzione disabilita la verifica che il nome host del server IMAP
   // corrisponda al nome nel suo certificato SSL.
-  // Ãˆ NECESSARIO se il tuo provider (es. Shellrent) usa un certificato generico.
-  // Espone a vulnerabilitÃ  MITM in produzione. RIMUOVILA se vai in produzione con un certificato valido!
+  // ÃƒË† NECESSARIO se il tuo provider (es. Shellrent) usa un certificato generico
+  // (es. *.shared.hosting.com).
+  // Espone a vulnerabilitÃƒÂ  Man-in-the-Middle (MITM) in produzione.
+  // PER AMBIENTI DI PRODUZIONE, ASSICURATI DI AVERE UN CERTIFICATO SSL VALIDO
+  // E Rimuovi O Imposta a `true`: `tlsOpts: { rejectUnauthorized: true }`
   tlsOpts: { rejectUnauthorized: false }
 });
 
@@ -452,7 +465,6 @@ imap.once('ready', () => {
     }
     console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
 
-    // Cerca email non lette (UNSEEN)
     imap.search(['UNSEEN'], (err, uids) => {
       if (err) {
         console.error('IMAP: Error searching for emails:', err);
@@ -497,11 +509,10 @@ imap.once('ready', () => {
 
       f.once('end', () => {
         console.log('IMAP: Finished fetching messages.');
-        // Marca le email come lette, cosÃ¬ non le rileggi sempre
         imap.addFlags(uids, ['\\Seen'], (flagErr) => {
           if (flagErr) console.error('IMAP: Error marking emails as seen:', flagErr);
           console.log('IMAP: Emails marked as seen.');
-          imap.end(); // Disconnettiti dall'IMAP
+          imap.end();
         });
       });
     });
@@ -572,12 +583,15 @@ FILE: components/ui/badge/index.ts
 import { type VariantProps, cva } from 'class-variance-authority'
 export { default as Badge } from './Badge.vue'
 export const badgeVariants = cva('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2', {
-    variants: { variant: { default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80', secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80', destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80', outline: 'text-foreground border-input',
-    // NUOVE VARIANTI PERSONALIZZATE PER I BADGE DEGLI UFFICI (con text-white)
-    contabilita: 'border-transparent bg-rose-500 text-white', // Rosso Rosato per ContabilitÃ 
-    supportoTecnico: 'border-transparent bg-lime-500 text-white', // Verde Lime per Supporto Tecnico
-    segreteria: 'border-transparent bg-violet-500 text-white', // Viola per Segreteria
-    } },
+    variants: { 
+        variant: { 
+            default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80', 
+            secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80', 
+            destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80', 
+            outline: 'text-foreground border-input',
+            // RIMOSSE LE VARIANTI PERSONALIZZATE PER I BADGE DEGLI UFFICI
+        } 
+    },
     defaultVariants: { variant: 'default' },
 })
 export type BadgeVariants = VariantProps<typeof badgeVariants>
@@ -591,11 +605,23 @@ import type { HTMLAttributes } from 'vue'
 import { Primitive, type PrimitiveProps } from 'radix-vue'
 import { type ButtonVariants, buttonVariants } from '.'
 import { cn } from '@/lib/utils'
-interface Props extends /* @vue-ignore */ PrimitiveProps { variant?: ButtonVariants['variant']; size?: ButtonVariants['size']; class?: HTMLAttributes['class'] }
-const props = withDefaults(defineProps<Props>(), { as: 'button' })
+
+// MODIFICA QUI: Rimuovi 'extends PrimitiveProps' e definisci esplicitamente 'as' e 'asChild'
+interface Props {
+  variant?: ButtonVariants['variant'];
+  size?: ButtonVariants['size'];
+  class?: HTMLAttributes['class'];
+  as?: PrimitiveProps['as']; // Usa il tipo da PrimitiveProps per 'as'
+  asChild?: PrimitiveProps['asChild']; // Usa il tipo da PrimitiveProps per 'asChild'
+}
+
+const props = withDefaults(defineProps<Props>(), { 
+  as: 'button', // Default tag HTML
+  asChild: false // Default a non renderizzare come child
+})
 </script>
 <template>
-  <Primitive :as="as" :as-child="asChild" :class="cn(buttonVariants({ variant, size }), props.class)"><slot /></Primitive>
+  <Primitive :as="props.as" :as-child="props.asChild" :class="cn(buttonVariants({ variant, size }), props.class)"><slot /></Primitive>
 </template>
 
 
@@ -721,8 +747,8 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
 <template>
   <DialogPortal>
     <DialogOverlay class="fixed inset-0 z-50 bg-black/80" />
-    <!-- MODIFICA QUI: Aggiunto bg-white !important e dark:bg-white !important dark:text-black !important -->
-    <DialogContent v-bind="forwarded" :class="cn('fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-white !important p-6 shadow-lg duration-200 sm:rounded-lg dark:bg-white !important dark:text-black !important', props.class)">
+    <!-- CLASSE AGGIORNATA QUI: 'max-w-lg' DEVE ESSERE STATO RIMOSSO -->
+    <DialogContent v-bind="forwarded" :class="cn('fixed left-1/2 top-1/2 z-50 grid w-full -translate-x-1/2 -translate-y-1/2 gap-4 border bg-white !important p-6 shadow-lg duration-200 sm:rounded-lg dark:bg-white !important dark:text-black !important', props.class)">
       <slot />
       <DialogClose class="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none">
         <X class="h-4 w-4" />
@@ -1070,7 +1096,7 @@ const modelValue = useVModel(props, 'modelValue', emits, { passive: true, defaul
 FILE: components/ui/toast/index.ts
 ================================================
 import type { ToastRootProps } from 'reka-ui'
-import type { HTMLAttributes } from 'vue'
+import type { Component, HTMLAttributes, VNode } from 'vue' // Aggiunto VNode
 
 export { default as Toast } from './Toast.vue'
 export { default as ToastAction } from './ToastAction.vue'
@@ -1084,10 +1110,14 @@ export { toast, useToast } from './use-toast'
 
 import { cva, type VariantProps } from 'class-variance-authority'
 
+// MODIFICA QUI: Estendi da ToastRootProps e aggiungi le proprietÃƒÂ  che vengono passate dal `use-toast`
 export interface ToastProps extends /* @vue-ignore */ ToastRootProps {
   class?: HTMLAttributes['class']
   variant?: ToastVariants['variant']
-  onOpenChange?: ((value: boolean) => void) | undefined
+  // ProprietÃ  aggiunte per compatibilitÃ  con ToasterToast in use-toast.ts
+  title?: string
+  description?: string | VNode | (() => VNode) // Deve essere compatibile con StringOrVNode
+  action?: Component // Componente per l'azione del toast
 }
 
 export const toastVariants = cva(
@@ -1108,12 +1138,13 @@ export const toastVariants = cva(
 
 type ToastVariants = VariantProps<typeof toastVariants>
 
-export interface ToastProps extends ToastRootProps {
-  class?: HTMLAttributes['class']
-  variant?: ToastVariants['variant']
-  onOpenChange?: ((value: boolean) => void) | undefined
-}
-
+// La definizione ToastProps qui sotto ÃƒÂ¨ duplicata e meno specifica,
+// manteniamo quella superiore che ÃƒÂ¨ piÃƒÂ¹ completa.
+// export interface ToastProps extends ToastRootProps {
+//   class?: HTMLAttributes['class']
+//   variant?: ToastVariants['variant']
+//   onOpenChange?: ((value: boolean) => void) | undefined
+// }
 
 
 ================================================
@@ -1129,7 +1160,8 @@ const props = defineProps</* @vue-ignore */ ToastProps>() // Aggiungi qui
 
 const emits = defineEmits<ToastRootEmits>()
 
-const delegatedProps = reactiveOmit(props, 'class')
+// Passa solo le props che ToastRoot di reka-ui si aspetta, escludendo quelle aggiuntive per use-toast
+const delegatedProps = reactiveOmit(props, 'class', 'title', 'description', 'action')
 
 const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
@@ -1138,12 +1170,11 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
   <ToastRoot
     v-bind="forwarded"
     :class="cn(toastVariants({ variant }), props.class)"
-    @update:open="onOpenChange"
+    @update:open="props.onOpenChange"
   >
     <slot />
   </ToastRoot>
 </template>
-
 
 
 ================================================
@@ -1510,23 +1541,42 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
 
-// Importa le icone necessarie per l'infografica e per il pulsante Aggiorna
-import { Mail, RefreshCw, Calculator, Settings, Calendar, Users } from 'lucide-vue-next';
+// Importa le icone necessarie per il refresh e i bottoni staff
+import { RefreshCw, Users, Edit, List, AlertTriangle } from 'lucide-vue-next';
 
 
 // --- STATO DELLA PAGINA ---
 const processedEmails = ref([]);
 const selectedEmailContent = ref(null);
 const showContentModal = ref(false);
-const isLoading = ref(true);
-const showAddStaffDialog = ref(false);
+const isLoadingEmails = ref(true);
 
-// Form per aggiungere nuovo staff
+// Stato per la modale di AGGIUNTA staff
+const showAddStaffDialog = ref(false);
 const newStaffForm = reactive({
   name: '',
   email: '',
-  responsibilities: '',
+  text_skills: '',
 });
+
+// Stato e dati per la modale di MODIFICA staff centralizzata
+const showUpdateStaffDialog = ref(false);
+const allStaffMembers = ref([]); // Lista completa dei dipendenti/uffici per la dropdown
+const selectedStaffIdToUpdate = ref(null); // ID del dipendente selezionato nella dropdown
+
+const updateStaffForm = reactive({ // Form per la modifica del testo delle skills
+  text_skills: '',
+});
+
+// Stato per la modale di VISUALIZZAZIONE staff
+const showViewStaffDialog = ref(false);
+const isLoadingStaff = ref(true);
+
+// Computed per ottenere il nome e l'email del dipendente selezionato nella modale di modifica
+const currentSelectedStaff = computed(() => {
+  return allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value) || {};
+});
+
 
 const activeFilter = ref('all');
 
@@ -1540,21 +1590,10 @@ const filteredEmails = computed(() => {
   return processedEmails.value;
 });
 
-const totalEmailsCount = computed(() => processedEmails.value ? processedEmails.value.length : 0);
-const forwardedToContabilitaCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Ufficio ContabilitÃ ').length;
-});
-const forwardedToSupportoTecnicoCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Supporto Tecnico').length;
-});
-const forwardedToSegreteriaCount = computed(() => {
-  return processedEmails.value.filter(e => e.status === 'forwarded' && e.staff?.name === 'Segreteria Generale').length;
-});
-
 
 // --- FUNZIONI PRINCIPALI ---
 const fetchProcessedEmails = async () => {
-  isLoading.value = true;
+  isLoadingEmails.value = true;
   try {
     const data = await $fetch('/api/inbox');
     processedEmails.value = data || [];
@@ -1569,9 +1608,47 @@ const fetchProcessedEmails = async () => {
     processedEmails.value = [];
   }
   finally {
-    isLoading.value = false;
+    isLoadingEmails.value = false;
   }
 };
+
+// Funzione: Carica la lista completa dello staff
+const fetchAllStaff = async () => {
+  isLoadingStaff.value = true;
+  try {
+    const data = await $fetch('/api/staff');
+    allStaffMembers.value = data || [];
+    // Imposta il primo staff come selezionato di default per la modale di modifica, se esiste
+    if (allStaffMembers.value.length > 0) {
+      selectedStaffIdToUpdate.value = allStaffMembers.value[0].id;
+      updateStaffForm.text_skills = allStaffMembers.value[0].text_skills;
+    } else {
+      selectedStaffIdToUpdate.value = null;
+      updateStaffForm.text_skills = '';
+    }
+  } catch (error) {
+    console.error("Impossibile caricare la lista staff:", error);
+    toast({
+      title: 'Errore',
+      description: 'Impossibile caricare la lista dei dipendenti/uffici.',
+      variant: 'destructive',
+    });
+    allStaffMembers.value = [];
+  } finally {
+    isLoadingStaff.value = false;
+  }
+};
+
+// Funzione per gestire la selezione di un dipendente nella dropdown di modifica
+const handleStaffSelectionChange = () => {
+  const selectedStaff = allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value);
+  if (selectedStaff) {
+    updateStaffForm.text_skills = selectedStaff.text_skills;
+  } else {
+    updateStaffForm.text_skills = '';
+  }
+};
+
 
 const viewEmailContent = (email) => {
   selectedEmailContent.value = email;
@@ -1579,31 +1656,51 @@ const viewEmailContent = (email) => {
 };
 
 const addStaff = async () => {
-  console.log('addStaff function called'); // Lasciamo il log per verifica
+  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI (per addStaff) ---
+  console.log('Frontend: addStaff function called on submit.');
+  console.log('Frontend: newStaffForm data:', {
+    name: newStaffForm.name,
+    email: newStaffForm.email,
+    text_skills: newStaffForm.text_skills
+  });
+
+  if (!newStaffForm.name || !newStaffForm.email || !newStaffForm.text_skills || newStaffForm.text_skills.trim() === '') {
+    toast({
+      title: 'Errore',
+      description: 'Nome, email e descrizione competenze sono campi obbligatori e non possono essere vuoti.',
+      variant: 'destructive',
+    });
+    console.error('Frontend: Errore: Campi addStaff mancanti/vuoti.');
+    return;
+  }
+  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
+
   try {
     const response = await $fetch('/api/staff', {
       method: 'POST',
       body: newStaffForm,
     });
-    
+
     if (response.status === 'success') {
       toast({
         title: 'Successo!',
         description: 'Dipendente aggiunto e salvato nel database.',
       });
       showAddStaffDialog.value = false;
-      Object.assign(newStaffForm, { name: '', email: '', responsibilities: '' });
+      Object.assign(newStaffForm, { name: '', email: '', text_skills: '' });
       await fetchProcessedEmails();
-
+      await fetchAllStaff(); // Aggiorna la lista staff per tutte le modali
+      console.log('Frontend: Aggiunta staff completata con successo.');
     } else {
       toast({
         title: 'Errore',
         description: response.message || 'Errore durante l\'aggiunta del dipendente.',
         variant: 'destructive',
       });
+      console.error('Frontend: Errore risposta API addStaff:', response.message);
     }
   } catch (error) {
-    console.error('Errore durante l\'aggiunta del dipendente:', error);
+    console.error('Frontend: Errore durante l\'aggiunta del dipendente:', error);
     toast({
       title: 'Errore',
       description: error.data?.statusMessage || 'Si Ã¨ verificato un errore imprevisto.',
@@ -1611,6 +1708,88 @@ const addStaff = async () => {
     });
   }
 };
+
+// Funzione per aprire la modale di AGGIORNAMENTO STAFF centralizzata
+const openCentralUpdateStaffDialog = async () => {
+  await fetchAllStaff(); // Carica sempre la lista piÃ¹ recente
+  showUpdateStaffDialog.value = true;
+};
+
+// Funzione per aprire la modale di VISUALIZZAZIONE STAFF
+const openViewStaffDetailsDialog = async () => {
+  await fetchAllStaff(); // Carica sempre la lista piÃ¹ recente
+  showViewStaffDialog.value = true;
+};
+
+const updateStaff = async () => {
+  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI ---
+  console.log('Frontend: updateStaff function called.');
+  console.log('Frontend: selectedStaffIdToUpdate:', selectedStaffIdToUpdate.value);
+  console.log('Frontend: updateStaffForm.text_skills:', updateStaffForm.text_skills);
+
+  if (!selectedStaffIdToUpdate.value) {
+    toast({
+      title: 'Errore',
+      description: 'Nessun dipendente selezionato per l\'aggiornamento.',
+      variant: 'destructive',
+    });
+    console.error('Frontend: Errore: Nessun dipendente selezionato.');
+    return;
+  }
+
+  if (!updateStaffForm.text_skills || updateStaffForm.text_skills.trim() === '') {
+    toast({
+      title: 'Errore',
+      description: 'Il campo "Descrizione Competenze" non puÃ² essere vuoto.',
+    });
+    console.error('Frontend: Errore: Il campo Descrizione Competenze Ã¨ vuoto.');
+    return;
+  }
+  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
+
+
+  console.log('updateStaff function called for ID:', selectedStaffIdToUpdate.value);
+  try {
+    // --- LOG AGGIUNTO QUI PRIMA DELLA CHIAMATA FETCH ---
+    console.log('Frontend: Tentativo di inviare richiesta PUT per aggiornare staff...');
+    console.log('Frontend: URL della richiesta:', `/api/staff/${selectedStaffIdToUpdate.value}`);
+    console.log('Frontend: Body della richiesta:', { text_skills: updateStaffForm.text_skills });
+    // --- FINE LOG AGGIUNTO QUI ---
+
+    const response = await $fetch(`/api/staff/${selectedStaffIdToUpdate.value}`, {
+      method: 'PUT',
+      body: {
+        text_skills: updateStaffForm.text_skills, // Inviamo solo il campo modificabile
+      },
+    });
+
+    if (response.status === 'success') {
+      toast({
+        title: 'Successo!',
+        description: 'Competenze del dipendente aggiornate e ricalcolate.',
+      });
+      showUpdateStaffDialog.value = false;
+      await fetchProcessedEmails(); // Ricarica tutte le email per riflettere le modifiche
+      await fetchAllStaff(); // Ricarica la lista staff per sicurezza
+      console.log('Frontend: Aggiornamento staff completato con successo.');
+    } else {
+      toast({
+        title: 'Errore',
+        description: response.message || 'Errore durante l\'aggiornamento delle competenze.',
+        variant: 'destructive',
+      });
+      console.error('Frontend: Errore risposta API:', response.message);
+    }
+  } catch (error) {
+    console.error('Frontend: Errore durante l\'aggiornamento delle competenze:', error);
+    toast({
+      title: 'Errore',
+      description: error.data?.statusMessage || 'Si Ã¨ verificato un errore imprevisto.',
+      variant: 'destructive',
+    });
+  }
+};
+
 
 // --- FUNZIONI UTILI PER LA GRAFICA E I BADGE ---
 const formatDate = (dateString) => {
@@ -1636,18 +1815,33 @@ const getStatusLabel = (status) => {
     case 'manual_review': return 'Revisione Manuale';
     case 'ai_error': return 'Errore AI';
     case 'forward_error': return 'Errore Inoltro';
+    case 'processing_error': return 'Errore Elaborazione';
     default: return status;
   }
 };
 
 const getStaffBadgeVariant = (staffName) => {
-  switch (staffName) {
-    case 'Ufficio ContabilitÃ ': return 'contabilita';
-    case 'Supporto Tecnico': return 'supportoTecnico';
-    case 'Segreteria Generale': return 'segreteria';
-    default: return 'outline';
-  }
+  return 'secondary';
 };
+
+// Funzione per ottenere le classi CSS per le righe urgenti
+const getRowUrgencyClass = (isUrgent) => {
+  // Aggiunto 'hover:bg-red-100' per feedback visivo sull'hover
+  return isUrgent ? 'border-l-4 border-red-500 bg-red-50 hover:bg-red-100' : '';
+};
+
+// Funzione per ottenere il badge di urgenza
+const getUrgencyBadge = (isUrgent) => {
+  if (isUrgent) {
+    return {
+      text: 'URGENTE',
+      variant: 'destructive', // Usa la variante 'destructive' per il badge rosso
+      icon: AlertTriangle // L'icona del triangolo d'allerta
+    };
+  }
+  return null; // Restituisce null se non Ã¨ urgente
+};
+
 
 // --- HOOK ---
 onMounted(async () => {
@@ -1661,71 +1855,19 @@ onMounted(async () => {
 
     <h1 class="text-2xl font-bold mb-4">Gestione Email Intelligente</h1>
 
-    <!-- SEZIONE: INFOGRAFICA (CARTE GRANDI IN ALTO, SOLO TITOLO E NUMERO) -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-      <Card class="bg-gradient-to-br from-blue-50 to-gray-100">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-gray-800">
-          <CardTitle class="text-sm font-medium">
-            Email Totali
-          </CardTitle>
-          <Mail class="h-4 w-4 text-gray-700" />
-        </CardHeader>
-        <CardContent class="text-gray-800">
-          <div class="text-2xl font-bold">
-            {{ totalEmailsCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-rose-200 to-red-400">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email ContabilitÃ 
-          </CardTitle>
-          <Calculator class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToContabilitaCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-lime-200 to-green-400">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email Supporto Tecnico
-          </CardTitle>
-          <Settings class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToSupportoTecnicoCount }}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card class="bg-gradient-to-br from-purple-200 to-fuchsia-300">
-        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2 text-black">
-          <CardTitle class="text-sm font-medium">
-            Email Segreteria
-          </CardTitle>
-          <Calendar class="h-4 w-4 text-gray-800" />
-        </CardHeader>
-        <CardContent class="text-black">
-          <div class="text-2xl font-bold">
-            {{ forwardedToSegreteriaCount }}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-    <!-- FINE SEZIONE INFOGRAFICA -->
-
-    <!-- Pulsante "Aggiungi Dipendente/Ufficio" (allineato a destra) -->
-    <div class="flex justify-end mb-4">
+    <!-- Pulsanti "Aggiungi", "Modifica" e "Visualizza" Dipendente/Ufficio (allineati a destra) -->
+    <div class="flex justify-end gap-2 mb-4">
       <Button variant="outline" @click="showAddStaffDialog = true" class="shrink-0">
         <Users class="h-4 w-4 mr-2" />
         Aggiungi Dipendente/Ufficio
+      </Button>
+      <Button variant="outline" @click="openCentralUpdateStaffDialog" class="shrink-0">
+        <Edit class="h-4 w-4 mr-2" />
+        Modifica Dipendente/Ufficio
+      </Button>
+      <Button variant="outline" @click="openViewStaffDetailsDialog" class="shrink-0">
+        <List class="h-4 w-4 mr-2" />
+        Visualizza Dipendenti/Uffici
       </Button>
     </div>
 
@@ -1737,22 +1879,22 @@ onMounted(async () => {
       <CardContent>
         <!-- TOOLBAR: SOLO PULSANTE AGGIORNA ALLINEATO A DESTRA (FILTRI RIMOSSI) -->
         <div class="flex justify-end mb-4">
-          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoading" class="shrink-0">
+          <Button variant="outline" @click="fetchProcessedEmails" :disabled="isLoadingEmails" class="shrink-0">
             <RefreshCw class="h-4 w-4 mr-2" />
             Aggiorna
           </Button>
         </div>
 
         <!-- Stato di Caricamento/Vuoto della Tabella -->
-        <div v-if="isLoading" class="text-center py-16">
+        <div v-if="isLoadingEmails" class="text-center py-16">
           <p class="text-muted-foreground">Caricamento storico email...</p>
         </div>
         <div v-else-if="filteredEmails.length > 0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Mittente & Oggetto</TableHead>
-                <TableHead>Etichetta (Assegnato A)</TableHead>
+                <TableHead class="text-left">Mittente</TableHead>
+                <TableHead class="text-center">Assegnato A</TableHead>
                 <TableHead class="text-center">Confidenza AI</TableHead>
                 <TableHead class="text-center">Stato</TableHead>
                 <TableHead class="text-right">Ricevuta il</TableHead>
@@ -1760,12 +1902,24 @@ onMounted(async () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              <TableRow v-for="email in filteredEmails" :key="email.id">
-                <TableCell class="font-medium">
-                  <div>{{ email.sender }}</div>
-                  <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+              <TableRow
+                v-for="email in filteredEmails"
+                :key="email.id"
+                :class="getRowUrgencyClass(email.is_urgent)"
+              >
+                <TableCell class="font-medium text-left">
+                  <div class="flex items-center gap-2">
+                    <!-- Incapsulo l'icona AlertTriangle in un div -->
+                    <div v-if="email.is_urgent" class="flex-shrink-0">
+                      <AlertTriangle class="h-4 w-4 text-red-600" title="Email Urgente" />
+                    </div>
+                    <div>
+                      <div>{{ email.sender }}</div>
+                      <div class="text-xs text-muted-foreground truncate max-w-xs" :title="email.subject">{{ email.subject }}</div>
+                    </div>
+                  </div>
                 </TableCell>
-                <TableCell>
+                <TableCell class="text-center">
                   <Badge :variant="getStaffBadgeVariant(email.staff?.name)">
                     {{ email.staff?.name || 'Non Assegnato' }}
                   </Badge>
@@ -1776,9 +1930,15 @@ onMounted(async () => {
                   </Badge>
                 </TableCell>
                 <TableCell class="text-center">
-                  <span>
-                    {{ getStatusLabel(email.status) }}
-                  </span>
+                  <div class="flex flex-col items-center gap-1">
+                    <span>{{ getStatusLabel(email.status) }}</span>
+                    <!-- Incapsulo il Badge di urgenza in un div -->
+                    <div v-if="getUrgencyBadge(email.is_urgent)">
+                      <Badge :variant="getUrgencyBadge(email.is_urgent).variant">
+                        {{ getUrgencyBadge(email.is_urgent).text }}
+                      </Badge>
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell class="text-right">{{ formatDate(email.created_at) }}</TableCell>
                 <TableCell class="text-center">
@@ -1800,7 +1960,7 @@ onMounted(async () => {
         </div>
       </CardContent>
     </Card>
-    
+
     <!-- Modale per visualizzare contenuto email -->
     <Dialog :open="showContentModal" @update:open="showContentModal = false">
       <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
@@ -1810,6 +1970,24 @@ onMounted(async () => {
           </DialogHeader>
           <div class="py-4 whitespace-pre-wrap text-sm max-h-96 overflow-y-auto">
               {{ selectedEmailContent.body_text || "Corpo dell'email non disponibile." }}
+
+              <!-- BLOCCO PER GLI ALLEGATI -->
+              <div v-if="selectedEmailContent.attachments && selectedEmailContent.attachments.length > 0" class="mt-4 border-t pt-4">
+                <h4 class="font-semibold mb-2">Allegati:</h4>
+                <ul class="list-disc pl-5">
+                  <li v-for="attachment in selectedEmailContent.attachments" :key="attachment.public_url || attachment.filename">
+                    <a :href="attachment.public_url" target="_blank" class="text-blue-600 hover:underline">
+                      {{ attachment.filename }} ({{ (attachment.size / 1024).toFixed(2) }} KB)
+                    </a>
+                  </li>
+                </ul>
+              </div>
+              <!-- Icona di Urgenza nella Modale -->
+              <!-- Incapsulo l'indicatore di urgenza in un div -->
+              <div v-if="selectedEmailContent.is_urgent" class="mt-4 flex items-center text-red-600 font-semibold">
+                <AlertTriangle class="h-5 w-5 mr-2" />
+                <span>Questa email Ã¨ stata classificata come URGENTE dall'AI.</span>
+              </div>
           </div>
           <DialogFooter>
               <Button @click="showContentModal = false" variant="outline">Chiudi</Button>
@@ -1826,7 +2004,7 @@ onMounted(async () => {
             Inserisci i dettagli del nuovo membro dello staff o del nuovo ufficio.
           </DialogDescription>
         </DialogHeader>
-        <form> <!-- RIMOSSO @submit.prevent dal form -->
+        <form @submit.prevent="addStaff">
           <div class="grid gap-4 py-4">
             <div class="grid grid-cols-4 items-center gap-4">
               <Label for="name" class="text-right">
@@ -1841,18 +2019,134 @@ onMounted(async () => {
               <Input id="email" type="email" v-model="newStaffForm.email" required class="col-span-3" />
             </div>
             <div class="grid grid-cols-4 items-center gap-4">
-              <Label for="responsibilities" class="text-right">
-                ResponsabilitÃ 
+              <Label for="textSkills" class="text-right">
+                Descrizione Competenze
               </Label>
-              <Textarea id="responsibilities" v-model="newStaffForm.responsibilities" required class="col-span-3" />
+              <Textarea id="textSkills" v-model="newStaffForm.text_skills" required class="col-span-3" />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" @click="showAddStaffDialog = false">Annulla</Button>
-            <!-- COLLEGATO addStaff direttamente all'evento @click -->
-            <Button type="button" @click="addStaff">Aggiungi</Button> 
+            <Button type="submit">Aggiungi</Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- Modale per Aggiornare Competenze Dipendente (Centralizzata) -->
+    <Dialog :open="showUpdateStaffDialog" @update:open="showUpdateStaffDialog = $event">
+      <DialogContent class="dialog-content-force-white">
+        <DialogHeader>
+          <DialogTitle>Modifica Competenze Dipendente/Ufficio</DialogTitle>
+          <DialogDescription>
+            Seleziona un dipendente/ufficio per aggiornare la descrizione delle sue competenze.
+          </DialogDescription>
+        </DialogHeader>
+        <form @submit.prevent="updateStaff">
+          <div class="grid gap-4 py-4">
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="staffSelect" class="text-right">
+                Seleziona Dipendente/Ufficio
+              </Label>
+              <select
+                id="staffSelect"
+                v-model="selectedStaffIdToUpdate"
+                @change="handleStaffSelectionChange"
+                class="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                required
+              >
+                <option v-if="allStaffMembers.length === 0" value="" disabled>Nessun dipendente disponibile</option>
+                <option
+                  v-for="staff in allStaffMembers"
+                  :key="staff.id"
+                  :value="staff.id"
+                >
+                  {{ staff.name }} ({{ staff.email }})
+                </option>
+              </select>
+            </div>
+
+            <!-- Campi nome e email visualizzati per il dipendente selezionato -->
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="selectedName" class="text-right">
+                Nome
+              </Label>
+              <Input id="selectedName" :model-value="currentSelectedStaff.name" readonly class="col-span-3 bg-gray-100 text-gray-600" />
+            </div>
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="selectedEmail" class="text-right">
+                Email
+              </Label>
+              <Input id="selectedEmail" :model-value="currentSelectedStaff.email" readonly class="col-span-3 bg-gray-100 text-gray-600" />
+            </div>
+
+            <div class="grid grid-cols-4 items-center gap-4">
+              <Label for="updateTextSkills" class="text-right">
+                Descrizione Competenze
+              </Label>
+              <Textarea id="updateTextSkills" v-model="updateStaffForm.text_skills" required class="col-span-3" />
+            </div>
+
+            <!-- Optional: Mostra le skills estratte dall'AI dopo l'update per verifica -->
+            <div v-if="currentSelectedStaff.skills && currentSelectedStaff.skills.length > 0" class="grid grid-cols-4 items-center gap-4">
+              <Label class="text-right">Skills estratte (AI)</Label>
+              <div class="col-span-3 flex flex-wrap gap-2">
+                <Badge v-for="skill in currentSelectedStaff.skills" :key="skill" variant="secondary">
+                  {{ skill }}
+                </Badge>
+              </div>
+            </div>
+
+
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" @click="showUpdateStaffDialog = false">Annulla</Button>
+            <Button type="submit" :disabled="!selectedStaffIdToUpdate">Salva Modifiche</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <!-- NUOVA MODALE PER VISUALIZZARE DIPENDENTI/UFFICI (AGGIORNATA) -->
+    <Dialog :open="showViewStaffDialog" @update:open="showViewStaffDialog = $event">
+      <DialogContent class="dialog-content-force-white max-w-7xl w-11/12">
+        <DialogHeader>
+          <DialogTitle>Elenco Dipendenti/Uffici</DialogTitle>
+          <DialogDescription>
+            Dettagli di tutti i membri dello staff e delle loro competenze.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="isLoadingStaff" class="text-center py-8">
+          <p class="text-muted-foreground">Caricamento lista dipendenti...</p>
+        </div>
+        <div v-else-if="allStaffMembers.length > 0" class="max-h-[500px] overflow-y-auto overflow-x-auto">
+          <Table class="min-w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[20%] min-w-[150px]">Nome Ufficio / Dipendente</TableHead>
+                <TableHead class="w-[25%] min-w-[200px]">Email</TableHead>
+                <TableHead class="w-[55%] min-w-[300px]">Descrizione Competenze</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="staff in allStaffMembers" :key="staff.id">
+                <TableCell class="font-medium">{{ staff.name }}</TableCell>
+                <TableCell class="break-all">{{ staff.email }}</TableCell>
+                <TableCell class="text-sm">
+                  <div class="whitespace-normal break-words">{{ staff.text_skills }}</div>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-else class="text-center py-8">
+          <p class="text-muted-foreground">Nessun dipendente/ufficio configurato.</p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" @click="showViewStaffDialog = false">Chiudi</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -1889,15 +2183,19 @@ export default defineEventHandler(async (event) => {
   const supabase = await serverSupabaseClient(event);
 
   const { data, error } = await supabase
-    .from('incoming_emails')
+    .from('incoming_emails') // Assicurati sia il nome corretto (con underscore o trattino se quotato)
     .select(`
-      id, created_at, sender, subject, body_text, status,
-      ai_confidence_score, ai_reasoning,
-      staff:assigned_to_staff_id ( id, name, email )
-    `)
+  id, created_at, sender, subject, body_text, status, is_urgent,
+  ai_confidence_score, ai_reasoning,
+  staff:assigned_to_staff_id ( id, name, email, text_skills, skills ),
+  attachments:email-attachments ( filename, mimetype, size, public_url )
+`)
     .order('created_at', { ascending: false });
 
-  if (error) throw createError({ statusCode: 500, statusMessage: error.message });
+  if (error) {
+      console.error('API inbox.get.js error:', error.message);
+      throw createError({ statusCode: 500, statusMessage: error.message });
+  }
   return data;
 });
 
@@ -1914,8 +2212,9 @@ export default defineEventHandler(async (event) => {
   const supabase = await serverSupabaseClient(event);
 
   const { data, error } = await supabase
+    // Modifica qui: seleziona le nuove colonne
     .from('staff')
-    .select('id, name, email, responsibilities')
+    .select('id, name, email, text_skills, skills') // Aggiungi text_skills e skills
     .order('name', { ascending: true });
 
   if (error) {
@@ -1933,33 +2232,49 @@ FILE: server/api/staff.post.js
 // server/api/staff.post.js
 
 import { defineEventHandler, readBody, createError } from 'h3';
-import { getSupabaseAdminClient } from '../utils/supabaseAdmin'; // PERCORSO CORRETTO
+import { getSupabaseAdminClient } from '../utils/supabaseAdmin';
+import { extractSkillsFromText } from '../utils/skillExtractor'; // Importa il nuovo servizio
 
 export default defineEventHandler(async (event) => {
   const supabaseAdmin = getSupabaseAdminClient();
   const body = await readBody(event);
-  const { name, email, responsibilities } = body;
+  const { name, email, text_skills } = body; 
 
-  if (!name || !email || !responsibilities) {
-    throw createError({ statusCode: 400, statusMessage: 'Nome, email e responsabilitÃ  sono campi obbligatori.' });
+  console.log('API Staff POST: Ricevuti dati ->', { name, email, text_skills: text_skills ? text_skills.substring(0, 50) + '...' : 'N/A' });
+
+  if (!name || !email || !text_skills || text_skills.trim() === '') { // Aggiorna la validazione
+    throw createError({ statusCode: 400, statusMessage: 'Nome, email e descrizione competenze sono campi obbligatori e non possono essere vuoti.' });
   }
 
   try {
+    // Estrai le skills dall'AI
+    console.log('API Staff POST: Chiamata a skillExtractor per text_skills:', text_skills ? text_skills.substring(0, 50) + '...' : 'N/A');
+    const skills = await extractSkillsFromText(text_skills);
+    console.log('API Staff POST: Skills estratte dall\'AI:', skills);
+
     const { data, error } = await supabaseAdmin
       .from('staff')
       .insert({
         name: name,
         email: email,
-        responsibilities: responsibilities,
+        text_skills: text_skills, // Inserisci il testo originale
+        skills: skills,          // Inserisci l'array estratto
       })
       .select()
       .single();
 
     if (error) {
-      console.error('Supabase staff insert error:', error.message);
-      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiunta del dipendente: ${error.message}` });
+      console.error('API Supabase staff insert error:', error.message);
+      
+      let statusMessage = `Errore durante l'aggiunta del dipendente: ${error.message}`;
+      if (error.code === '23505' && error.message.includes('staff_email_key')) {
+        statusMessage = 'Un dipendente/ufficio con questa email esiste giÃƒÂ . Si prega di usare un\'email unica.';
+      }
+      
+      throw createError({ statusCode: 500, statusMessage: statusMessage });
     }
 
+    console.log('API Staff POST: Dipendente aggiunto con successo:', data);
     return { status: 'success', message: 'Dipendente aggiunto con successo!', data: data };
   } catch (e) {
     console.error('Errore nel processare la richiesta POST per staff:', e);
@@ -1974,14 +2289,16 @@ FILE: server/api/emails/process.post.js
 // File: server/api/emails/process.post.js
 
 import { defineEventHandler, readBody, createError, setResponseStatus } from 'h3';
-import { serverSupabaseClient } from '#supabase/server'; // Per accedere al client Supabase (con chiave anonima)
+import { getSupabaseAdminClient } from '../../utils/supabaseAdmin'; // CAMBIATO: Usa il client Admin
 import { analyzeEmailWithAI } from '../../utils/aiService'; // Funzione centralizzata per l'analisi AI
 import { sendEmail } from '../../utils/emailSender';     // Funzione centralizzata per l'invio email
 
 export default defineEventHandler(async (event) => {
-  const supabase = await serverSupabaseClient(event); // Client Supabase per operazioni DB
+  const supabaseAdmin = getSupabaseAdminClient(); // Usa il client Supabase Admin
   const body = await readBody(event);
   const { sender, subject, body_text } = body;
+
+  console.log('API Manual Process POST: Ricevuti dati ->', { sender, subject: subject ? subject.substring(0, 50) + '...' : 'N/A' });
 
   if (!sender || !subject || !body_text) {
     throw createError({ statusCode: 400, statusMessage: 'Mittente, oggetto o corpo email mancanti.' });
@@ -1991,7 +2308,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     // 1. Salva l'email nel database con stato 'new'
-    const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
+    const { data: savedEmail, error: saveError } = await supabaseAdmin.from('incoming_emails').insert([{ // CAMBIATO: usa supabaseAdmin
         sender: sender,
         subject: subject,
         body_text: body_text,
@@ -2004,14 +2321,16 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 500, statusMessage: `Errore durante il salvataggio dell'email: ${saveError.message}` });
     }
     emailRecordId = savedEmail.id;
-    console.log(`Manual email saved to DB with ID: ${emailRecordId}`);
+    console.log(`API Manual Process POST: Manual email saved to DB with ID: ${emailRecordId}`);
 
     // 2. Analisi AI
+    console.log(`API Manual Process POST: Avvio analisi AI per email ID ${emailRecordId}...`);
     const aiResult = await analyzeEmailWithAI(sender, subject, body_text);
+    console.log(`API Manual Process POST: Risultato analisi AI per ID ${emailRecordId}:`, aiResult);
     
     // 3. Aggiorna l'email nel DB con i risultati dell'AI
     const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
-    const { error: updateError } = await supabase.from('incoming_emails').update({
+    const { error: updateError } = await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
         assigned_to_staff_id: aiResult.assigned_to_staff_id,
         ai_confidence_score: aiResult.ai_confidence_score,
         ai_reasoning: aiResult.ai_reasoning,
@@ -2022,12 +2341,13 @@ export default defineEventHandler(async (event) => {
         console.error('API Supabase AI update error (process.post):', updateError.message);
         throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento AI dell'email: ${updateError.message}` });
     }
-    console.log(`AI analysis updated for manual email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+    console.log(`API Manual Process POST: AI analysis updated for manual email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
 
     // 4. Se l'AI ha assegnato e trovato un'email, inoltra l'email
     let assignedStaffMember = null;
     if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
         try {
+            console.log(`API Manual Process POST: Tentativo di inoltro email ID ${emailRecordId} a ${aiResult.assignedStaffEmail}...`);
             await sendEmail(
                 aiResult.assignedStaffEmail,
                 sender.split('<')[0].trim() || sender, // Nome dal mittente originale
@@ -2037,7 +2357,7 @@ export default defineEventHandler(async (event) => {
                 aiResult.ai_reasoning
             );
             // Aggiorna lo stato a 'forwarded'
-            await supabase.from('incoming_emails').update({
+            await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
                 status: 'forwarded'
             }).eq('id', emailRecordId);
 
@@ -2046,19 +2366,19 @@ export default defineEventHandler(async (event) => {
                 name: aiResult.assignedStaffName, 
                 email: aiResult.assignedStaffEmail 
             };
-            console.log(`Manual email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+            console.log(`API Manual Process POST: Manual email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
 
         } catch (forwardError) {
             console.error('API Error during manual email forwarding (process.post):', forwardError);
             // Aggiorna lo stato a 'forward_error'
-            await supabase.from('incoming_emails').update({
+            await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
                 status: 'forward_error'
             }).eq('id', emailRecordId);
             throw createError({ statusCode: 500, statusMessage: `Errore durante l'inoltro dell'email: ${forwardError.message}` });
         }
     } else {
-        console.warn(`Manual email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
-        // Lo stato Ã¨ giÃ  'manual_review' dal passo precedente
+        console.warn(`API Manual Process POST: Manual email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+        // Lo stato ÃƒÂ¨ giÃƒÂ  'manual_review' dal passo precedente
     }
 
     setResponseStatus(event, 200);
@@ -2071,10 +2391,17 @@ export default defineEventHandler(async (event) => {
 
   } catch (error) {
     console.error('Unhandled error in process.post.js:', error);
+    // Se c'ÃƒÂ¨ un errore e emailRecordId ÃƒÂ¨ noto, prova ad aggiornare lo stato a 'processing_error'
+    if (emailRecordId) {
+        await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
+            status: 'processing_error',
+            // error_message: error.message // Se hai un campo per i messaggi di errore
+        }).eq('id', emailRecordId);
+    }
     setResponseStatus(event, error.statusCode || 500);
     return { 
         status: 'error',
-        message: error.statusMessage || 'Si Ã¨ verificato un errore imprevisto.',
+        message: error.statusMessage || 'Si ÃƒÂ¨ verificato un errore imprevisto.',
         details: error.message // Per dettagli nell'errore frontend
     };
   }
@@ -2086,13 +2413,13 @@ FILE: server/api/emails/webhook.post.js
 ================================================
 // File: server/api/emails/webhook.post.js
 
-import { defineEventHandler, readBody, createError, setResponseStatus } from 'h3';
-import { serverSupabaseClient } from '#supabase/server'; // Per accedere al client Supabase (con chiave anonima)
+import { defineEventHandler, readBody, setResponseStatus } from 'h3';
+import { getSupabaseAdminClient } from '../../utils/supabaseAdmin'; // CAMBIATO: Usa il client Admin
 import { analyzeEmailWithAI } from '../../utils/aiService'; // Funzione centralizzata per l'analisi AI
 import { sendEmail } from '../../utils/emailSender';     // Funzione centralizzata per l'invio email
 
 export default defineEventHandler(async (event) => {
-    const supabase = await serverSupabaseClient(event); // Client Supabase per operazioni DB
+    const supabaseAdmin = getSupabaseAdminClient(); // Usa il client Supabase Admin
     const payload = await readBody(event); // Il payload del webhook (es. da SendGrid Inbound Parse)
 
     // Estrai i dati dal payload (questi campi sono comuni nei webhook di parsing email)
@@ -2102,6 +2429,9 @@ export default defineEventHandler(async (event) => {
     const subject = payload.subject || 'Nessun Oggetto';
     const body_text = payload.text || payload.html || 'Corpo email vuoto.';
     const body_html = payload.html || null;
+
+    console.log('Webhook POST: Ricevuti dati ->', { senderEmail, subject: subject ? subject.substring(0, 50) + '...' : 'N/A' });
+
 
     if (!senderEmail) {
       console.warn("Webhook ricevuto senza mittente valido. Ignorato.");
@@ -2113,7 +2443,7 @@ export default defineEventHandler(async (event) => {
 
     try {
         // 1. Salva l'email nel database con stato 'new'
-        const { data: savedEmail, error: saveError } = await supabase.from('incoming_emails').insert([{
+        const { data: savedEmail, error: saveError } = await supabaseAdmin.from('incoming_emails').insert([{ // CAMBIATO: usa supabaseAdmin
             sender: senderEmail,
             subject: subject, 
             body_text: body_text, 
@@ -2126,14 +2456,16 @@ export default defineEventHandler(async (event) => {
             throw new Error(`Errore Supabase (insert): ${saveError.message}`); // Rilancia per cattura successiva
         }
         emailRecordId = savedEmail.id;
-        console.log(`Webhook email saved to DB with ID: ${emailRecordId}`);
+        console.log(`Webhook POST: Email saved to DB with ID: ${emailRecordId}`);
 
         // 2. Analisi AI
+        console.log(`Webhook POST: Avvio analisi AI per email ID ${emailRecordId}...`);
         const aiResult = await analyzeEmailWithAI(senderEmail, subject, body_text);
-        
+        console.log(`Webhook POST: Risultato analisi AI per ID ${emailRecordId}:`, aiResult);
+
         // 3. Aggiorna l'email nel DB con i risultati dell'AI
         const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
-        const { error: updateError } = await supabase.from('incoming_emails').update({
+        const { error: updateError } = await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
             assigned_to_staff_id: aiResult.assigned_to_staff_id,
             ai_confidence_score: aiResult.ai_confidence_score,
             ai_reasoning: aiResult.ai_reasoning,
@@ -2144,11 +2476,12 @@ export default defineEventHandler(async (event) => {
             console.error('Webhook Supabase AI update error (webhook.post):', updateError.message);
             throw new Error(`Errore Supabase (update AI): ${updateError.message}`);
         }
-        console.log(`AI analysis updated for webhook email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+        console.log(`Webhook POST: AI analysis updated for webhook email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
 
         // 4. Inoltra l'email al dipendente corretto
         if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
             try {
+                console.log(`Webhook POST: Tentativo di inoltro email ID ${emailRecordId} a ${aiResult.assignedStaffEmail}...`);
                 await sendEmail(
                     aiResult.assignedStaffEmail,
                     senderName,
@@ -2158,22 +2491,22 @@ export default defineEventHandler(async (event) => {
                     aiResult.ai_reasoning
                 );
                 // Aggiorna lo stato a 'forwarded'
-                await supabase.from('incoming_emails').update({
+                await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
                     status: 'forwarded'
                 }).eq('id', emailRecordId);
-                console.log(`Webhook email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+                console.log(`Webhook POST: Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
 
             } catch (forwardError) {
                 console.error('Webhook Error during email forwarding (webhook.post):', forwardError);
                 // Aggiorna lo stato a 'forward_error'
-                await supabase.from('incoming_emails').update({
+                await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
                     status: 'forward_error'
                 }).eq('id', emailRecordId);
                 throw forwardError; // Rilancia l'errore per il catch generale
             }
         } else {
-            console.warn(`Webhook email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
-            // Lo stato Ã¨ giÃ  'manual_review'
+            console.warn(`Webhook POST: Email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+            // Lo stato ÃƒÂ¨ giÃƒÂ  'manual_review'
         }
 
         setResponseStatus(event, 200); // Sempre 200 OK per i webhook che hanno elaborato il messaggio
@@ -2181,9 +2514,9 @@ export default defineEventHandler(async (event) => {
 
     } catch (error) {
         console.error('Unhandled error in webhook.post.js:', error);
-        // Se c'Ã¨ un errore e emailRecordId Ã¨ noto, prova ad aggiornare lo stato a 'processing_error'
+        // Se c'ÃƒÂ¨ un errore e emailRecordId ÃƒÂ¨ noto, prova ad aggiornare lo stato a 'processing_error'
         if (emailRecordId) {
-            await supabase.from('incoming_emails').update({
+            await supabaseAdmin.from('incoming_emails').update({ // CAMBIATO: usa supabaseAdmin
                 status: 'processing_error',
                 // error_message: error.message // Se hai un campo per i messaggi di errore
             }).eq('id', emailRecordId);
@@ -2195,6 +2528,68 @@ export default defineEventHandler(async (event) => {
 
 
 ================================================
+FILE: server/api/staff/[id].put.js
+================================================
+// server/api/staff/[id].put.js
+
+import { defineEventHandler, readBody, createError, getRouterParams } from 'h3';
+import { getSupabaseAdminClient } from '../../utils/supabaseAdmin';
+import { extractSkillsFromText } from '../../utils/skillExtractor'; // GiÃƒÆ’Ã‚Â  esistente
+
+export default defineEventHandler(async (event) => {
+    console.log('*** API STAFF PUT: ENDPOINT RAGGIUNTO ***');
+  const supabaseAdmin = getSupabaseAdminClient(); // Usa il client Supabase Admin
+  const { id } = getRouterParams(event); // Ottiene l'ID dalla URL
+  const body = await readBody(event);
+  const { text_skills } = body; // Ci aspettiamo solo text_skills dal frontend
+
+  console.log('API Staff PUT: Ricevuti dati per ID:', id, '-> text_skills:', text_skills ? text_skills.substring(0, 50) + '...' : 'N/A');
+
+
+  if (!id) {
+    throw createError({ statusCode: 400, statusMessage: 'ID dipendente mancante.' });
+  }
+  if (text_skills === undefined || text_skills === null || text_skills.trim() === '') {
+    throw createError({ statusCode: 400, statusMessage: 'Il campo "Descrizione Competenze" non puÃƒÆ’Ã‚Â² essere vuoto.' });
+  }
+
+  try {
+    // 1. Estrai le skills aggiornate dall'AI
+    console.log('API Staff PUT: Chiamata a skillExtractor per text_skills:', text_skills ? text_skills.substring(0, 50) + '...' : 'N/A');
+    const skills = await extractSkillsFromText(text_skills);
+    console.log('API Staff PUT: Skills estratte dall\'AI:', skills);
+
+    // 2. Aggiorna il record nel database
+    const { data, error } = await supabaseAdmin
+      .from('staff')
+      .update({
+        text_skills: text_skills,
+        skills: skills,
+      })
+      .eq('id', id)
+      .select() // Per ottenere il record aggiornato
+      .single();
+
+    if (error) {
+      console.error('API Supabase staff update error:', error.message);
+      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento del dipendente: ${error.message}` });
+    }
+
+    if (!data) {
+      // Questo caso si verifica se l'ID non corrisponde a nessun record
+      throw createError({ statusCode: 404, statusMessage: 'Dipendente non trovato.' });
+    }
+
+    console.log('API Staff PUT: Dipendente aggiornato con successo:', data);
+    return { status: 'success', message: 'Dipendente aggiornato con successo!', data: data };
+  } catch (e) {
+    console.error('Errore nel processare la richiesta PUT per staff:', e);
+    throw createError({ statusCode: e.statusCode || 500, statusMessage: e.statusMessage || 'Errore interno del server.' });
+  }
+});
+
+
+================================================
 FILE: server/plugins/scheduler.js
 ================================================
 // server/plugins/scheduler.js
@@ -2202,6 +2597,11 @@ import { Cron } from 'croner';
 import { processNewIncomingEmails } from '../utils/mailProcessor';
 
 export default defineNitroPlugin(async (nitroApp) => {
+  // Aggiunto per debug: Controlla la variabile d'ambiente
+  console.log('--- NITRO SERVER START ---');
+  console.log('NODE_TLS_REJECT_UNAUTHORIZED (in Nitro):', process.env.NODE_TLS_REJECT_UNAUTHORIZED);
+  console.log('--- END NITRO SERVER START ---');
+
   // Gestore globale per gli errori di Promise non catturati (unhandledRejection).
   process.on('unhandledRejection', (reason, promise) => {
     console.error('GLOBAL ERROR: Unhandled Rejection at Promise', promise, 'reason:', reason);
@@ -2216,11 +2616,11 @@ export default defineNitroPlugin(async (nitroApp) => {
   }
 
   // Programma l'esecuzione periodica della funzione di elaborazione email.
-  console.log('Email processing scheduler started and scheduled to run every  minute.');
+  console.log('Email processing scheduler started and scheduled to run every 5 minutes.');
   
-  // *** MODIFICA QUI: Aggiungi "new" prima di Cron() ***
-  new Cron('*/1 * * * *', async () => { 
-    console.log('Running scheduled email processing (every  minute)...');
+  // *** MODIFICA QUI: Aggiungi "new" prima di Cron() e imposta a 5 minuti ***
+  new Cron('*/5 * * * *', async () => { // Esegui ogni 5 minuti
+    console.log('Running scheduled email processing (every 5 minutes)...');
     try {
       await processNewIncomingEmails();
     } catch (error) {
@@ -2238,22 +2638,26 @@ FILE: server/utils/aiService.js
 // server/utils/aiService.js
 import { useRuntimeConfig } from '#imports';
 import { $fetch } from 'ofetch';
-// Usiamo il client admin per fetch staff
-import { getSupabaseAdminClient } from './supabaseAdmin'; 
+import { getSupabaseAdminClient } from './supabaseAdmin';
 
 const config = useRuntimeConfig();
 const GOOGLE_API_KEY = config.googleApiKey;
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
 
+// MODIFICA QUI: AGGIUNTO L'ISTRUZIONE PER L'URGENZA AL PROMPT
 const PROMPT_EMAIL_TRIAGE = `
 Sei un assistente AI super efficiente per uno studio di commercialisti. Il tuo compito Ã¨ analizzare un'email in arrivo e assegnarla al membro dello staff piÃ¹ appropriato.
 
-Ecco la lista del personale e delle loro responsabilitÃ :
+Inoltre, devi determinare se l'email Ã¨ URGENTE. Un'email Ã¨ urgente se contiene parole come "urgente",  "ora", "subito", "immediato", "critico", "deadline", "scadenza", o se il contesto implica una richiesta che richiede attenzione immediata.
+
+Ecco la lista del personale e delle loro responsabilitÃ . Ogni membro ha un ID unico (UUID).
 --- LISTA PERSONALE ---
 {staff_list}
 -----------------------
 
-Analizza il seguente contenuto dell'email (mittente, oggetto e corpo) e determina quale persona dello staff Ã¨ il piÃ¹ adatto a gestirla.
+Analizza il seguente contenuto dell'email (mittente, oggetto e corpo) e determina:
+1. Quale persona dello staff Ã¨ il piÃ¹ adatto a gestirla.
+2. Se l'email Ã¨ urgente.
 
 --- CONTENUTO EMAIL ---
 Mittente: {email_from}
@@ -2263,61 +2667,120 @@ Corpo: {email_body}
 
 La tua risposta DEVE essere un oggetto JSON con il seguente formato, senza alcun testo aggiuntivo:
 {
-  "assigned_to_staff_id": "l'UUID del dipendente scelto dalla lista. Se NESSUNO sembra appropriato, lascia null o l'UUID di un dipendente generico per 'segreteria generale' se ne hai uno predefinito.",
+  "assigned_to_staff_id": "L'UUID ESATTO del dipendente scelto dalla LISTA PERSONALE sopra. Non inventare o alterare gli UUID. Se NESSUNO nella lista sembra appropriato o non sei sicuro, DEVI restituire null.",
   "ai_confidence_score": un numero da 0.0 (per niente sicuro) a 1.0 (molto sicuro),
-  "ai_reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipendente/ufficio. Esempio: 'L'email menziona problemi di accesso al software, che Ã¨ di competenza del Supporto Tecnico.'"
+  "ai_reasoning": "Una breve frase che spiega perchÃ© hai scelto quel dipendente/ufficio e se l'email Ã¨ considerata urgente.",
+  "is_urgent": true/false // Indica se l'email Ã¨ urgente in base al contenuto.
 }
 `;
 
 export async function analyzeEmailWithAI(sender, subject, body_text) {
-    const supabaseAdmin = getSupabaseAdminClient(); // Usa il client admin
-    const { data: staff, error: staffError } = await supabaseAdmin.from('staff').select('id, name, responsibilities, email'); // Selezioniamo anche email
+    const supabaseAdmin = getSupabaseAdminClient();
+    const { data: staff, error: staffError } = await supabaseAdmin.from('staff').select('id, name, text_skills, skills, email');
     if (staffError) {
-        console.error('Error fetching staff for AI:', staffError.message);
+        console.error('AI_SERVICE: Error fetching staff for AI:', staffError.message);
         throw new Error('Impossibile caricare il personale per l\'analisi AI.');
     }
     if (!staff || staff.length === 0) {
-        console.warn('Nessun personale configurato nel database per l\'analisi AI.');
+        console.warn('AI_SERVICE: Nessun personale configurato nel database per l\'analisi AI.');
         return {
             assigned_to_staff_id: null,
             ai_confidence_score: 0.1,
             ai_reasoning: "Nessun personale configurato per l'assegnazione.",
+            assignedStaffEmail: null,
+            assignedStaffName: null,
+            is_urgent: false, // DEFAULT SE NESSUN PERSONALE
         };
     }
 
-    const staffListForPrompt = staff.map(s => `ID: ${s.id}, Nome: ${s.name}, ResponsabilitÃ : ${s.responsibilities}, Email: ${s.email}`).join('\n');
+    const staffListForPrompt = staff.map(s => {
+      const skillsDescription = s.skills && s.skills.length > 0
+        ? `Competenze: ${s.skills.join(', ')}`
+        : `Descrizione: ${s.text_skills}`;
+      return `ID: ${s.id}, Nome: ${s.name}, ${skillsDescription}, Email: ${s.email}`;
+    }).join('\n');
+
     const finalPrompt = PROMPT_EMAIL_TRIAGE
         .replace('{staff_list}', staffListForPrompt)
         .replace('{email_from}', sender)
         .replace('{email_subject}', subject)
-        .replace('{email_body}', body_text.substring(0, 4000));
+        .replace('{email_body}', body_text ? body_text.substring(0, 4000) : 'No body text provided');
 
     let aiResponse;
     try {
+        console.log('AI_SERVICE: Sending request to Gemini...');
         const response = await $fetch.raw(GEMINI_API_URL, {
-            method: 'POST', body: { contents: [{ parts: [{ text: finalPrompt }] }] }
+            method: 'POST',
+            body: { contents: [{ parts: [{ text: finalPrompt }] }] },
+            headers: { 'Content-Type': 'application/json' },
         });
         const responseData = response._data;
-        if (!responseData.candidates?.[0]?.content?.parts?.[0]?.text) {
-            throw new Error('Risposta non valida o malformata da Gemini');
+        const rawResponseText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!rawResponseText) {
+            console.error('AI_SERVICE: Gemini did not return valid text content.');
+            throw new Error('Risposta non valida o malformata da Gemini: contenuto testuale mancante.');
         }
-        const rawJson = responseData.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
-        aiResponse = JSON.parse(rawJson);
+
+        console.log('AI_SERVICE: Raw text response from Gemini (partial):', rawResponseText.substring(0, Math.min(rawResponseText.length, 500)) + '...');
+
+        const jsonMatch = rawResponseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        let jsonString = '';
+        if (jsonMatch && jsonMatch[1]) {
+            jsonString = jsonMatch[1].trim();
+            console.log('AI_SERVICE: JSON block extracted via regex.');
+        } else {
+            console.warn('AI_SERVICE: No markdown JSON block found. Attempting to parse entire response as JSON.');
+            jsonString = rawResponseText.trim();
+        }
+
+        try {
+            aiResponse = JSON.parse(jsonString);
+            console.log('AI_SERVICE: Parsed AI response JSON:', JSON.stringify(aiResponse));
+        } catch (parseError) {
+            console.error('AI_SERVICE: Error parsing JSON from Gemini:', parseError);
+            console.error('AI_SERVICE: Malformed JSON string received:', jsonString);
+            throw new Error(`Risposta AI malformata: ${parseError.message}`);
+        }
+
     } catch (e) {
-        console.error("Errore chiamata Gemini:", e.message);
+        console.error("AI_SERVICE: Error calling Gemini API:", e.message);
         throw new Error(`Errore durante l'analisi AI dell'email: ${e.message}`);
     }
-    
-    // Valida l'ID dello staff suggerito
+
     const bestMatchStaff = staff.find(s => s.id === aiResponse.assigned_to_staff_id);
     const finalAssignedId = bestMatchStaff ? aiResponse.assigned_to_staff_id : null;
+
+    // Converte aiResponse.is_urgent in un boolean effettivo
+    const isUrgent = typeof aiResponse.is_urgent === 'boolean' ? aiResponse.is_urgent : false;
+
+
+    console.log('AI_SERVICE: Staff search result:');
+    console.log(`  AI suggested ID: ${aiResponse.assigned_to_staff_id}`);
+    console.log(`  Match found in DB: ${!!bestMatchStaff}`);
+    if (bestMatchStaff) {
+        console.log(`  Matched Staff: Name=${bestMatchStaff.name}, Email=${bestMatchStaff.email}`);
+    } else {
+        console.warn('AI_SERVICE: No matching staff found in DB for the ID suggested by AI. assigned_to_staff_id will be NULL.');
+    }
+    console.log(`  Is Urgent: ${isUrgent}`); // NUOVO LOG
+
+    console.log('AI_SERVICE: Final AI Result being returned:', {
+        assigned_to_staff_id: finalAssignedId,
+        ai_confidence_score: parseFloat(aiResponse.ai_confidence_score) || 0,
+        ai_reasoning: aiResponse.ai_reasoning,
+        assignedStaffEmail: bestMatchStaff?.email || null,
+        assignedStaffName: bestMatchStaff?.name || null,
+        is_urgent: isUrgent, // AGGIUNGI QUI LO STATO DI URGENZA
+    });
 
     return {
         assigned_to_staff_id: finalAssignedId,
         ai_confidence_score: parseFloat(aiResponse.ai_confidence_score) || 0,
         ai_reasoning: aiResponse.ai_reasoning,
-        assignedStaffEmail: bestMatchStaff?.email || null, // Aggiungiamo l'email dello staff qui
+        assignedStaffEmail: bestMatchStaff?.email || null,
         assignedStaffName: bestMatchStaff?.name || null,
+        is_urgent: isUrgent, // AGGIUNGI QUI LO STATO DI URGENZA
     };
 }
 
@@ -2332,7 +2795,8 @@ import { useRuntimeConfig } from '#imports';
 const config = useRuntimeConfig();
 sgMail.setApiKey(config.sendgridApiKey);
 
-export async function sendEmail(to, fromName, fromAddress, subject, originalBody, aiReasoning) {
+// AGGIUNTA DI UN NUOVO PARAMETRO 'attachments'
+export async function sendEmail(to, fromName, fromAddress, subject, originalBody, aiReasoning, attachments = []) {
   const SENDER_EMAIL = config.senderEmail; // L'email verificata in SendGrid (test@aitaky.it)
 
   const htmlBody = `
@@ -2357,6 +2821,7 @@ export async function sendEmail(to, fromName, fromAddress, subject, originalBody
     subject: `[Smistato da AI] ${subject}`,
     html: htmlBody,
     replyTo: fromAddress, // Permette di rispondere direttamente al cliente originale
+    attachments: attachments // PASSIAMO GLI ALLEGATI A SENDGRID QUI
   };
 
   try {
@@ -2364,6 +2829,10 @@ export async function sendEmail(to, fromName, fromAddress, subject, originalBody
     console.log(`Email inoltrata con successo a ${to} tramite SendGrid.`);
   } catch (error) {
     console.error("Errore durante l'inoltro con SendGrid:", error.response?.body || error.message);
+    // Puoi anche loggare dettagli specifici se l'errore Ã¨ un SendGridError (es. allegati troppo grandi)
+    if (error.response && error.response.body && error.response.body.errors) {
+        error.response.body.errors.forEach(e => console.error(`SendGrid Error Detail: ${e.message}`));
+    }
     throw error; // Rilancia l'errore per gestirlo nel chiamante
   }
 }
@@ -2377,23 +2846,30 @@ import Imap from 'node-imap';
 import { simpleParser } from 'mailparser';
 
 export async function fetchNewEmails(config) {
+  console.log('IMAP Client Config for fetchNewEmails:', {
+    user: config.imapUsername,
+    host: config.imapHost,
+    port: config.imapPort,
+    tls: true,
+    tlsOptsRejectUnauthorized: false // Esplicito per il log
+  });
+
   const imap = new Imap({
     user: config.imapUsername,
     password: config.imapPassword,
     host: config.imapHost,
     port: config.imapPort,
     tls: true,
-    tlsOpts: { rejectUnauthorized: false } // Mantiene il bypass del certificato
+    tlsOpts: { rejectUnauthorized: false }
   });
 
-  // Flag per assicurarsi che la connessione venga chiusa una sola volta e in modo sicuro
-  let connectionState = 'connecting'; // 'connecting', 'ready', 'closed', 'error'
+  let connectionState = 'connecting';
   const endConnection = (error = null) => {
     if (connectionState === 'closed') {
-      return; // GiÃ  chiusa
+      return;
     }
     try {
-      if (imap.state !== 'disconnected') { // Tenta di chiudere solo se non Ã¨ giÃ  disconnesso
+      if (imap.state !== 'disconnected') {
         imap.end();
       }
       connectionState = 'closed';
@@ -2413,16 +2889,14 @@ export async function fetchNewEmails(config) {
       connectionState = 'ready';
       console.log('IMAP: Connected successfully to the main client!');
 
-      // *** MODIFICA QUI: Sposta il gestore degli errori del socket qui dentro ***
-      // imap.client.socket dovrebbe essere definito una volta che la connessione Ã¨ "ready"
-      if (imap.client && imap.client.socket) { // Aggiungi un controllo di sicurezza in piÃ¹
+      if (imap.client && imap.client.socket) {
         imap.client.socket.on('error', (err) => {
           if (err.code === 'ECONNRESET') {
             console.warn('IMAP (Socket): Received ECONNRESET. This is often a benign post-operation disconnect.', err.message);
           } else {
             console.error('IMAP (Socket): Unhandled socket error:', err);
           }
-          endConnection(err); // Assicurati che la connessione venga terminata
+          endConnection(err);
         });
       } else {
           console.warn('IMAP: imap.client or imap.client.socket was not available after ready event. Socket error handling might be incomplete.');
@@ -2431,40 +2905,39 @@ export async function fetchNewEmails(config) {
       imap.openBox(config.imapMailbox, false, (err, box) => {
         if (err) {
           console.error('IMAP: Error opening mailbox:', err);
-          endConnection(err); // Chiudi la connessione in caso di errore
-          return reject(err); // Rifiuta la promise
+          endConnection(err);
+          return reject(err);
         }
         console.log(`IMAP: Mailbox "${config.imapMailbox}" opened.`);
 
         imap.search(['UNSEEN'], (err, uids) => {
           if (err) {
             console.error('IMAP: Error searching for emails:', err);
-            endConnection(err); // Chiudi la connessione in caso di errore
-            return reject(err); // Rifiuta la promise
+            endConnection(err);
+            return reject(err);
           }
 
           if (!uids || uids.length === 0) {
             console.log('IMAP: No new unseen emails.');
-            endConnection(); // Chiudi la connessione
-            return resolve([]); // Risolvi con array vuoto se non ci sono email
+            endConnection();
+            return resolve([]);
           }
 
           console.log(`IMAP: Found ${uids.length} unseen emails. Fetching them.`);
 
-          const fetchPromises = []; // Array per contenere le Promises di ogni singola email
+          const fetchPromises = [];
 
-          const f = imap.fetch(uids, { bodies: '', struct: true, markSeen: false }); // markSeen: false per marcare manualmente
+          // Assicurati che 'bodies: '' sia sufficiente per gli allegati, lo Ã¨ per default con mailparser
+          const f = imap.fetch(uids, { bodies: '' });
 
           f.on('message', (msg, seqno) => {
             let buffer = '';
-            let currentUid; // Variabile per immagazzinare l'UID di questo specifico messaggio
+            let currentUid;
 
-            // Cattura l'UID appena gli attributi sono disponibili
             msg.once('attributes', (attrs) => {
               currentUid = attrs.uid;
             });
 
-            // Crea una Promise per il parsing di questo singolo messaggio
             const messagePromise = new Promise(messageResolve => {
               msg.on('body', (stream) => {
                 stream.on('data', (chunk) => {
@@ -2473,8 +2946,18 @@ export async function fetchNewEmails(config) {
                 stream.once('end', async () => {
                   try {
                     const parsed = await simpleParser(buffer);
-                    messageResolve({ // Risolvi la Promise del messaggio con i dati parsati
-                      uid: currentUid, // USA L'UID CATTURATO DAGLI ATTRIBUTI
+
+                    // --- NUOVI LOG PER DEBUG ALLEGATI ---
+                    console.log(`IMAP: Message #${seqno} parsed. Attachments count: ${parsed.attachments ? parsed.attachments.length : 0}`);
+                    if (parsed.attachments && parsed.attachments.length > 0) {
+                        parsed.attachments.forEach((att, i) => {
+                            console.log(`  Attachment ${i + 1}: Filename='${att.filename}', ContentType='${att.contentType}', Size=${att.size} bytes. Content (Buffer/Uint8Array) present: ${!!att.content && att.content.length > 0}`);
+                        });
+                    }
+                    // --- FINE NUOVI LOG ---
+
+                    messageResolve({
+                      uid: currentUid,
                       messageId: parsed.messageId,
                       from: parsed.from?.text,
                       to: parsed.to?.text,
@@ -2482,16 +2965,17 @@ export async function fetchNewEmails(config) {
                       text: parsed.text,
                       html: parsed.html,
                       date: parsed.date,
-                      raw: buffer
+                      raw: buffer,
+                      attachments: parsed.attachments || [] // Questa riga Ã¨ corretta
                     });
                   } catch (parseErr) {
-                    console.error('Error parsing email:', parseErr);
-                    messageResolve(null); // Risolvi con null in caso di errore di parsing
+                    console.error('IMAP: Error parsing email:', parseErr);
+                    messageResolve(null);
                   }
                 });
               });
             });
-            fetchPromises.push(messagePromise); // Aggiungi la Promise di questo messaggio all'array
+            fetchPromises.push(messagePromise);
           });
 
           f.once('error', (fetchErr) => {
@@ -2507,22 +2991,21 @@ export async function fetchNewEmails(config) {
 
             if (parsedEmails.length > 0) {
               const validUidsToMark = parsedEmails.map(e => e.uid).filter(uid => uid !== undefined && uid !== null);
-              
+
               if (validUidsToMark.length > 0) {
                 try {
                   await new Promise((flagResolve, flagReject) => {
                     imap.addFlags(validUidsToMark, ['\\Seen'], (flagErr) => {
                       if (flagErr) {
                         console.error('IMAP: Error marking emails as seen:', flagErr);
-                        flagReject(flagErr); // Rifiuta la Promise interna se c'Ã¨ un errore
+                        flagReject(flagErr);
                       } else {
                         console.log('IMAP: Valid emails marked as seen.');
-                        flagResolve(); // Risolvi la Promise interna
+                        flagResolve();
                       }
                     });
                   });
                 } catch (addFlagsError) {
-                  // Se addFlags fallisce, lo logghiamo ma non blocchiamo il flusso principale
                   console.error('IMAP: Failed to mark emails as seen due to:', addFlagsError);
                 }
                 endConnection();
@@ -2542,17 +3025,14 @@ export async function fetchNewEmails(config) {
       });
     });
 
-    // Gestore generale per errori IMAP (cattura eventi che non sono legati a specifici stream di fetch)
     imap.once('error', (err) => {
-      // Cattura ECONNRESET solo se la connessione non Ã¨ giÃ  gestita altrove.
-      // A volte ECONNRESET avviene dopo la chiusura intenzionale del socket.
-      if (!connectionEnded && ['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(err.code) && connectionState === 'ready') {
+      if (['ECONNRESET', 'ETIMEDOUT', 'EPIPE'].includes(err.code) && connectionState === 'ready') {
         console.warn(`IMAP: Received a non-critical connection error (${err.code}). Ignoring as a potential post-operation issue.`, err.message);
-      } else if (!connectionEnded) { // Per altri errori non gestiti e se la connessione non Ã¨ chiusa
+      } else {
         console.error('IMAP: Global connection error:', err);
         reject(err);
       }
-      endConnection(err); // Assicurati di chiudere la connessione
+      endConnection(err);
     });
 
     imap.once('end', () => {
@@ -2574,97 +3054,322 @@ import { sendEmail } from './emailSender';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 
 export async function processNewIncomingEmails() {
-  console.log('Starting email processing cycle...');
+  console.log('MAIL_PROCESSOR: Starting email processing cycle...');
   const config = useRuntimeConfig();
   const supabaseAdmin = getSupabaseAdminClient();
 
   try {
-    // 1. Leggi le nuove email dalla casella IMAP
     const incomingRawEmails = await fetchNewEmails(config);
-    console.log(`Fetched ${incomingRawEmails.length} new emails from IMAP.`);
+    console.log(`MAIL_PROCESSOR: Fetched ${incomingRawEmails.length} new emails from IMAP.`);
 
     for (const email of incomingRawEmails) {
-      console.log(`Processing email from ${email.from} - Subject: ${email.subject}`);
-      let emailRecordId = null; // Per tenere traccia dell'ID nel DB
+      console.log(`\n--- MAIL_PROCESSOR: Processing email from "${email.from}" - Subject: "${email.subject.substring(0, Math.min(email.subject.length, 50))}..." ---`);
+      let emailRecordId = null;
 
       try {
-        // 2. Salva l'email raw nel database
-        const { data: savedEmail, error: saveError } = await supabaseAdmin.from('incoming_emails').insert([{
+        // 1. Salva l'email raw nel database PRIMA di gestire gli allegati per ottenere l'ID
+        // Inseriamo anche il default is_urgent=false qui per coerenza
+        const { data: savedEmail, error: saveEmailError } = await supabaseAdmin.from('incoming_emails').insert([{
             sender: email.from,
             subject: email.subject,
             body_text: email.text,
             body_html: email.html,
             status: 'new',
-            // created_at sarÃ  impostato automaticamente dal default del DB
+            is_urgent: false, // Inseriamo il default iniziale di non urgente
         }]).select().single();
 
-        if (saveError) throw new Error(`Supabase save error: ${saveError.message}`);
+        if (saveEmailError) {
+            console.error(`MAIL_PROCESSOR: ERROR saving new email to DB: ${saveEmailError.message}`);
+            throw new Error(`Supabase save email error: ${saveEmailError.message}`);
+        }
         emailRecordId = savedEmail.id;
-        console.log(`Email saved to DB with ID: ${emailRecordId}`);
+        console.log(`MAIL_PROCESSOR: Email saved to DB with ID: ${emailRecordId}`);
 
-        // 3. Analizza l'email con l'AI (Gemini)
+        // --- INIZIO GESTIONE ALLEGATI: Ora che abbiamo emailRecordId ---
+        if (email.attachments && email.attachments.length > 0) {
+          console.log(`MAIL_PROCESSOR: Found ${email.attachments.length} attachments for email ID ${emailRecordId}. Attempting upload and metadata save.`);
+          for (const attachment of email.attachments) {
+            console.log(`MAIL_PROCESSOR: Processing attachment: ${attachment.filename || 'N/A'}, Type: ${attachment.contentType || 'N/A'}, Size: ${attachment.size || 0} bytes.`);
+            
+            if (!attachment.content || !(attachment.content instanceof Buffer) || attachment.content.length === 0) {
+                console.warn(`MAIL_PROCESSOR: Attachment "${attachment.filename || 'N/A'}" has no valid content (or is empty). Skipping upload for this attachment.`);
+                continue;
+            }
+
+            try {
+              const uniqueFileIdentifier = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+              const storagePath = `${emailRecordId}/${uniqueFileIdentifier}_${attachment.filename}`;
+
+              console.log(`MAIL_PROCESSOR: Attempting to upload "${attachment.filename}" to Storage at path: "email-attachments/${storagePath}"`);
+              const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+                .from('email-attachments')
+                .upload(storagePath, attachment.content, {
+                  contentType: attachment.contentType,
+                  upsert: true
+                });
+
+              if (uploadError) {
+                console.error(`MAIL_PROCESSOR: ERROR uploading attachment "${attachment.filename}" for email ID ${emailRecordId}:`, uploadError.message);
+                continue;
+              }
+
+              const publicUrlResult = supabaseAdmin.storage
+                                .from('email-attachments')
+                                .getPublicUrl(uploadData.path);
+
+              const publicUrl = publicUrlResult.data?.publicUrl;
+              if (!publicUrl) {
+                  console.error(`MAIL_PROCESSOR: ERROR getting public URL for "${attachment.filename}":`, publicUrlResult.error?.message || 'Unknown error getting public URL.');
+                  continue;
+              }
+              console.log(`MAIL_PROCESSOR: Attachment "${attachment.filename}" uploaded successfully. Public URL: ${publicUrl}`);
+
+              const attachmentMetadataToSave = {
+                email_id: emailRecordId,
+                filename: attachment.filename || 'no-filename',
+                mimetype: attachment.contentType || 'application/octet-stream',
+                size: attachment.size || 0,
+                storage_path: storagePath,
+                public_url: publicUrl
+              };
+
+              console.log('MAIL_PROCESSOR: Data for email-attachments insert:', JSON.stringify(attachmentMetadataToSave, null, 2));
+
+              console.log(`MAIL_PROCESSOR: Attempting to save attachment metadata for "${attachment.filename}" (email ID ${emailRecordId}).`);
+              const { error: saveAttachError } = await supabaseAdmin.from('email-attachments').insert(attachmentMetadataToSave);
+
+              if (saveAttachError) {
+                console.error(`MAIL_PROCESSOR: ERROR saving attachment metadata for "${attachment.filename}" (email ID ${emailRecordId}):`, saveAttachError.message || saveAttachError);
+              } else {
+                console.log(`MAIL_PROCESSOR: Attachment metadata for "${attachment.filename}" saved to DB successfully.`);
+              }
+
+            } catch (uploadInnerError) {
+              console.error(`MAIL_PROCESSOR: Unhandled error during attachment upload/save for "${attachment.filename || 'N/A'}" (email ID ${emailRecordId}):`, uploadInnerError.message || uploadInnerError);
+            }
+          }
+        } else {
+            console.log(`MAIL_PROCESSOR: No attachments found for email ID ${emailRecordId}.`);
+        }
+        // --- FINE GESTIONE ALLEGATI ---
+
+
+        // 2. Continua con l'analisi AI
+        console.log(`MAIL_PROCESSOR: Initiating AI analysis for email ID ${emailRecordId}...`);
         const aiResult = await analyzeEmailWithAI(email.from, email.subject, email.text || email.html);
+        console.log(`MAIL_PROCESSOR: AI analysis complete for email ID ${emailRecordId}. Result: `, aiResult);
+
+        // Determinare il nuovo stato basandosi sull'analisi AI
+        let newStatus = 'manual_review'; // Default se l'AI non assegna
+        if (aiResult.assigned_to_staff_id) {
+            newStatus = 'analyzed'; // Assegnato dall'AI
+        }
         
-        // 4. Aggiorna l'email nel DB con i risultati dell'AI
-        const { error: updateError } = await supabaseAdmin.from('incoming_emails').update({
+        // 3. Aggiorna l'email nel DB con i risultati dell'AI (status, assigned_to_staff_id, etc. e is_urgent)
+        console.log(`MAIL_PROCESSOR: Updating email ID ${emailRecordId} in DB with AI results. New status: ${newStatus}, Is Urgent: ${aiResult.is_urgent}`);
+        const { error: updateAIError } = await supabaseAdmin.from('incoming_emails').update({
             assigned_to_staff_id: aiResult.assigned_to_staff_id,
             ai_confidence_score: aiResult.ai_confidence_score,
             ai_reasoning: aiResult.ai_reasoning,
-            status: aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review', // Se l'AI non assegna, richiede revisione manuale
+            status: newStatus,
+            is_urgent: aiResult.is_urgent, // AGGIUNGI QUI is_urgent
         }).eq('id', emailRecordId);
 
-        if (updateError) throw new Error(`Supabase AI update error: ${updateError.message}`);
-        console.log(`AI analysis updated for email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+        if (updateAIError) {
+            console.error(`MAIL_PROCESSOR: ERROR updating email ID ${emailRecordId} with AI results: ${updateAIError.message}`);
+            throw new Error(`Supabase AI update error: ${updateAIError.message}`);
+        }
+        console.log(`MAIL_PROCESSOR: AI analysis results successfully updated for email ID ${emailRecordId}.`);
 
-        // 5. Inoltra l'email al destinatario suggerito dall'AI
+        // 4. Inoltra l'email al destinatario suggerito dall'AI, se presente
         if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+            console.log(`MAIL_PROCESSOR: Attempting to forward email ID ${emailRecordId} to ${aiResult.assignedStaffEmail} (Assigned to: ${aiResult.assignedStaffName})...`);
             try {
+                const { data: attachmentsToForward, error: fetchAttachError } = await supabaseAdmin
+                    .from('email-attachments')
+                    .select('filename, mimetype, storage_path')
+                    .eq('email_id', emailRecordId);
+
+                let sendgridAttachments = [];
+                if (fetchAttachError) {
+                    console.error(`MAIL_PROCESSOR: ERROR fetching attachments for forwarding (email ID ${emailRecordId}):`, fetchAttachError.message);
+                } else if (attachmentsToForward && attachmentsToForward.length > 0) {
+                    console.log(`MAIL_PROCESSOR: Found ${attachmentsToForward.length} attachments to prepare for forwarding.`);
+                    for (const attachMeta of attachmentsToForward) {
+                        try {
+                            const { data: downloadedBlob, error: downloadError } = await supabaseAdmin.storage
+                                .from('email-attachments')
+                                .download(attachMeta.storage_path);
+
+                            if (downloadError) {
+                                console.error(`MAIL_PROCESSOR: ERROR downloading attachment "${attachMeta.filename}" for forwarding:`, downloadError.message);
+                                continue;
+                            }
+
+                            if (!(downloadedBlob instanceof Blob)) {
+                                console.error(`MAIL_PROCESSOR: Expected Blob, received different type for "${attachMeta.filename}". Skipping attachment preparation.`);
+                                continue;
+                            }
+
+                            const arrayBuffer = await downloadedBlob.arrayBuffer();
+                            const bufferContent = Buffer.from(arrayBuffer);
+                            const contentBase64 = bufferContent.toString('base64');
+                            
+                            sendgridAttachments.push({
+                                content: contentBase64,
+                                filename: attachMeta.filename,
+                                type: attachMeta.mimetype,
+                                disposition: 'attachment',
+                            });
+                            console.log(`MAIL_PROCESSOR: Attachment "${attachMeta.filename}" prepared for SendGrid.`);
+
+                        } catch (downloadOrEncodeError) {
+                            console.error(`MAIL_PROCESSOR: ERROR preparing attachment "${attachMeta.filename}" for SendGrid:`, downloadOrEncodeError.message || downloadOrEncodeError);
+                        }
+                    }
+                }
+                
                 await sendEmail(
                     aiResult.assignedStaffEmail,
-                    email.from.split('<')[0].trim() || email.from, // Nome del mittente
-                    email.from, // Indirizzo email del mittente originale
+                    email.from.split('<')[0].trim() || email.from,
+                    email.from,
                     email.subject,
-                    email.text || email.html, // Invia il testo o l'HTML originale
-                    aiResult.ai_reasoning
+                    email.text || email.html,
+                    aiResult.ai_reasoning,
+                    sendgridAttachments // PASSIAMO GLI ALLEGATI QUI
                 );
 
-                // Aggiorna lo stato a 'forwarded' nel DB
                 const { error: forwardStatusError } = await supabaseAdmin.from('incoming_emails').update({
                     status: 'forwarded',
-                    // Non ci sono campi forwarded_to_email o forwarded_at nel tuo DB schema
                 }).eq('id', emailRecordId);
 
-                if (forwardStatusError) console.error(`Error updating forwarded status for ID ${emailRecordId}:`, forwardStatusError.message);
-                console.log(`Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+                if (forwardStatusError) {
+                    console.error(`MAIL_PROCESSOR: ERROR updating status to 'forwarded' for ID ${emailRecordId}:`, forwardStatusError.message);
+                } else {
+                    console.log(`MAIL_PROCESSOR: Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail} and status updated to 'forwarded'.`);
+                }
 
             } catch (forwardError) {
-                console.error(`Error forwarding email ID ${emailRecordId}:`, forwardError);
-                // Aggiorna lo stato a 'forward_error' nel DB
+                console.error(`MAIL_PROCESSOR: ERROR forwarding email ID ${emailRecordId}:`, forwardError);
                 await supabaseAdmin.from('incoming_emails').update({
                     status: 'forward_error',
-                    // Potresti aggiungere un campo 'error_details' per salvare l'errore completo
                 }).eq('id', emailRecordId);
+                console.log(`MAIL_PROCESSOR: Status for email ID ${emailRecordId} updated to 'forward_error'.`);
             }
         } else {
-            console.warn(`Email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+            console.warn(`MAIL_PROCESSOR: Email ID ${emailRecordId} not assigned by AI or missing staff email. No forwarding attempted. Status remains '${newStatus}'.`);
         }
 
       } catch (innerError) {
-        console.error(`Error processing single email (ID ${emailRecordId || 'N/A'}):`, innerError);
-        // Se si verifica un errore prima di salvare l'email o durante il primo salvataggio,
-        // emailRecordId potrebbe essere null. Gestisci di conseguenza.
+        console.error(`MAIL_PROCESSOR: Critical ERROR processing single email (ID ${emailRecordId || 'N/A'}):`, innerError.message);
         if (emailRecordId) {
+            console.log(`MAIL_PROCESSOR: Attempting to update email ID ${emailRecordId} status to 'processing_error'.`);
             await supabaseAdmin.from('incoming_emails').update({
                 status: 'processing_error',
-                // error_message: innerError.message, // Se aggiungi un campo per i messaggi di errore
             }).eq('id', emailRecordId);
+            console.log(`MAIL_PROCESSOR: Status for email ID ${emailRecordId} updated to 'processing_error'.`);
         }
       }
     }
   } catch (globalError) {
-    console.error('Global error during email processing cycle:', globalError);
+    console.error('MAIL_PROCESSOR: Global ERROR during email processing cycle:', globalError);
   }
-  console.log('Email processing cycle finished.');
+  console.log('MAIL_PROCESSOR: Email processing cycle finished.');
+}
+
+
+================================================
+FILE: server/utils/skillExtractor.js
+================================================
+// server/utils/skillExtractor.js
+import { useRuntimeConfig } from '#imports';
+import { $fetch } from 'ofetch';
+
+const config = useRuntimeConfig();
+const GOOGLE_API_KEY = config.googleApiKey;
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GOOGLE_API_KEY}`;
+
+const PROMPT_SKILL_EXTRACTION = `
+Sei un assistente AI specializzato nell'estrazione di competenze da una descrizione testuale.
+Data la seguente descrizione di un dipendente/ufficio, estrai le singole competenze e restituiscile come un array JSON di stringhe.
+Non includere nessun altro testo oltre all'array JSON.
+
+Esempio di input: "Gestisce la contabilitÃƒÂ  generale, la fatturazione, e si occupa delle dichiarazioni fiscali. Conosce bene Excel e SAP."
+Esempio di output: ["contabilitÃƒÂ  generale", "fatturazione", "dichiarazioni fiscali", "Excel", "SAP"]
+
+Testo da analizzare:
+"""
+{text_skills_description}
+"""
+`;
+
+export async function extractSkillsFromText(text_skills_description) {
+  console.log("SKILL_EXTRACTOR: Inizio estrazione skills per:", text_skills_description ? text_skills_description.substring(0, Math.min(text_skills_description.length, 50)) + '...' : 'testo vuoto');
+
+  if (!text_skills_description || text_skills_description.trim() === '') {
+    console.warn("SKILL_EXTRACTOR: Testo competenze vuoto. Ritorno array vuoto.");
+    return [];
+  }
+
+  const finalPrompt = PROMPT_SKILL_EXTRACTION.replace('{text_skills_description}', text_skills_description.trim());
+  console.log("SKILL_EXTRACTOR: Prompt finale per Gemini (parziale):", finalPrompt.substring(0, Math.min(finalPrompt.length, 200)) + '...');
+
+  try {
+    const response = await $fetch.raw(GEMINI_API_URL, {
+      method: 'POST',
+      body: { contents: [{ parts: [{ text: finalPrompt }] }] },
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    const responseData = response._data;
+    const rawResponseText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!rawResponseText) {
+      console.warn("SKILL_EXTRACTOR: Gemini non ha restituito contenuto testuale valido nel campo atteso.");
+      return [];
+    }
+    
+    console.log("SKILL_EXTRACTOR: Risposta testuale raw da Gemini (parziale):", rawResponseText.substring(0, Math.min(rawResponseText.length, 500)) + '...');
+
+    // MIGLIORAMENTO CHIAVE: Tentativo di estrazione del blocco JSON usando regex piÃƒÂ¹ robusta
+    const jsonMatch = rawResponseText.match(/```(?:json)?\s*([\s\S]*?)\s*```/); // Cattura anche senza 'json' dopo i backticks
+    let jsonString = '';
+    if (jsonMatch && jsonMatch[1]) {
+        jsonString = jsonMatch[1].trim();
+        console.log("SKILL_EXTRACTOR: Blocco JSON markdown trovato e estratto.");
+    } else {
+        // Fallback: se non trova il blocco ```...```, prova a parsare l'intera risposta
+        console.warn("SKILL_EXTRACTOR: Blocco JSON markdown non trovato. Tentativo di parsing dell'intera risposta come JSON.");
+        jsonString = rawResponseText.trim();
+    }
+
+    console.log("SKILL_EXTRACTOR: JSON grezzo (probabile) estratto per parsing:", jsonString.substring(0, Math.min(jsonString.length, 200)) + '...');
+
+    let skillsArray = [];
+    try {
+        skillsArray = JSON.parse(jsonString);
+    } catch (parseError) {
+        console.error("SKILL_EXTRACTOR: Errore nel parsing JSON:", parseError);
+        console.error("SKILL_EXTRACTOR: Stringa JSON malformata ricevuta:", jsonString);
+        return []; // Restituisce array vuoto in caso di JSON invalido
+    }
+
+    if (!Array.isArray(skillsArray)) {
+        console.warn("SKILL_EXTRACTOR: L'AI ha restituito un non-array per le skills dopo il parsing. Ritorno array vuoto.");
+        return [];
+    }
+
+    const cleanedSkills = skillsArray.map(skill => String(skill).trim()).filter(skill => skill.length > 0);
+    console.log("SKILL_EXTRACTOR: Skills estratte e pulite (Final):", cleanedSkills);
+    return cleanedSkills;
+
+  } catch (e) {
+    console.error("SKILL_EXTRACTOR: Errore durante la chiamata Gemini per l'estrazione delle skills:", e);
+    // In caso di errore AI/rete, restituisci un array vuoto per non bloccare l'operazione
+    return []; 
+  }
 }
 
 

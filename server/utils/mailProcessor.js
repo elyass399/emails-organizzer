@@ -5,95 +5,225 @@ import { sendEmail } from './emailSender';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 
 export async function processNewIncomingEmails() {
-  console.log('Starting email processing cycle...');
+  console.log('MAIL_PROCESSOR: Starting email processing cycle...');
   const config = useRuntimeConfig();
   const supabaseAdmin = getSupabaseAdminClient();
 
   try {
-    // 1. Leggi le nuove email dalla casella IMAP
     const incomingRawEmails = await fetchNewEmails(config);
-    console.log(`Fetched ${incomingRawEmails.length} new emails from IMAP.`);
+    console.log(`MAIL_PROCESSOR: Fetched ${incomingRawEmails.length} new emails from IMAP.`);
 
     for (const email of incomingRawEmails) {
-      console.log(`Processing email from ${email.from} - Subject: ${email.subject}`);
-      let emailRecordId = null; // Per tenere traccia dell'ID nel DB
+      console.log(`\n--- MAIL_PROCESSOR: Processing email from "${email.from}" - Subject: "${email.subject.substring(0, Math.min(email.subject.length, 50))}..." ---`);
+      let emailRecordId = null;
 
       try {
-        // 2. Salva l'email raw nel database
-        const { data: savedEmail, error: saveError } = await supabaseAdmin.from('incoming_emails').insert([{
+        // 1. Salva l'email raw nel database PRIMA di gestire gli allegati per ottenere l'ID
+        // Inseriamo anche il default is_urgent=false qui per coerenza
+        const { data: savedEmail, error: saveEmailError } = await supabaseAdmin.from('incoming_emails').insert([{
             sender: email.from,
             subject: email.subject,
             body_text: email.text,
             body_html: email.html,
             status: 'new',
-            // created_at sarà impostato automaticamente dal default del DB
+            is_urgent: false, // Inseriamo il default iniziale di non urgente
         }]).select().single();
 
-        if (saveError) throw new Error(`Supabase save error: ${saveError.message}`);
+        if (saveEmailError) {
+            console.error(`MAIL_PROCESSOR: ERROR saving new email to DB: ${saveEmailError.message}`);
+            throw new Error(`Supabase save email error: ${saveEmailError.message}`);
+        }
         emailRecordId = savedEmail.id;
-        console.log(`Email saved to DB with ID: ${emailRecordId}`);
+        console.log(`MAIL_PROCESSOR: Email saved to DB with ID: ${emailRecordId}`);
 
-        // 3. Analizza l'email con l'AI (Gemini)
+        // --- INIZIO GESTIONE ALLEGATI: Ora che abbiamo emailRecordId ---
+        if (email.attachments && email.attachments.length > 0) {
+          console.log(`MAIL_PROCESSOR: Found ${email.attachments.length} attachments for email ID ${emailRecordId}. Attempting upload and metadata save.`);
+          for (const attachment of email.attachments) {
+            console.log(`MAIL_PROCESSOR: Processing attachment: ${attachment.filename || 'N/A'}, Type: ${attachment.contentType || 'N/A'}, Size: ${attachment.size || 0} bytes.`);
+            
+            if (!attachment.content || !(attachment.content instanceof Buffer) || attachment.content.length === 0) {
+                console.warn(`MAIL_PROCESSOR: Attachment "${attachment.filename || 'N/A'}" has no valid content (or is empty). Skipping upload for this attachment.`);
+                continue;
+            }
+
+            try {
+              const uniqueFileIdentifier = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+              const storagePath = `${emailRecordId}/${uniqueFileIdentifier}_${attachment.filename}`;
+
+              console.log(`MAIL_PROCESSOR: Attempting to upload "${attachment.filename}" to Storage at path: "email-attachments/${storagePath}"`);
+              const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+                .from('email-attachments')
+                .upload(storagePath, attachment.content, {
+                  contentType: attachment.contentType,
+                  upsert: true
+                });
+
+              if (uploadError) {
+                console.error(`MAIL_PROCESSOR: ERROR uploading attachment "${attachment.filename}" for email ID ${emailRecordId}:`, uploadError.message);
+                continue;
+              }
+
+              const publicUrlResult = supabaseAdmin.storage
+                                .from('email-attachments')
+                                .getPublicUrl(uploadData.path);
+
+              const publicUrl = publicUrlResult.data?.publicUrl;
+              if (!publicUrl) {
+                  console.error(`MAIL_PROCESSOR: ERROR getting public URL for "${attachment.filename}":`, publicUrlResult.error?.message || 'Unknown error getting public URL.');
+                  continue;
+              }
+              console.log(`MAIL_PROCESSOR: Attachment "${attachment.filename}" uploaded successfully. Public URL: ${publicUrl}`);
+
+              const attachmentMetadataToSave = {
+                email_id: emailRecordId,
+                filename: attachment.filename || 'no-filename',
+                mimetype: attachment.contentType || 'application/octet-stream',
+                size: attachment.size || 0,
+                storage_path: storagePath,
+                public_url: publicUrl
+              };
+
+              console.log('MAIL_PROCESSOR: Data for email-attachments insert:', JSON.stringify(attachmentMetadataToSave, null, 2));
+
+              console.log(`MAIL_PROCESSOR: Attempting to save attachment metadata for "${attachment.filename}" (email ID ${emailRecordId}).`);
+              const { error: saveAttachError } = await supabaseAdmin.from('email-attachments').insert(attachmentMetadataToSave);
+
+              if (saveAttachError) {
+                console.error(`MAIL_PROCESSOR: ERROR saving attachment metadata for "${attachment.filename}" (email ID ${emailRecordId}):`, saveAttachError.message || saveAttachError);
+              } else {
+                console.log(`MAIL_PROCESSOR: Attachment metadata for "${attachment.filename}" saved to DB successfully.`);
+              }
+
+            } catch (uploadInnerError) {
+              console.error(`MAIL_PROCESSOR: Unhandled error during attachment upload/save for "${attachment.filename || 'N/A'}" (email ID ${emailRecordId}):`, uploadInnerError.message || uploadInnerError);
+            }
+          }
+        } else {
+            console.log(`MAIL_PROCESSOR: No attachments found for email ID ${emailRecordId}.`);
+        }
+        // --- FINE GESTIONE ALLEGATI ---
+
+
+        // 2. Continua con l'analisi AI
+        console.log(`MAIL_PROCESSOR: Initiating AI analysis for email ID ${emailRecordId}...`);
         const aiResult = await analyzeEmailWithAI(email.from, email.subject, email.text || email.html);
+        console.log(`MAIL_PROCESSOR: AI analysis complete for email ID ${emailRecordId}. Result: `, aiResult);
+
+        // Determinare il nuovo stato basandosi sull'analisi AI
+        let newStatus = 'manual_review'; // Default se l'AI non assegna
+        if (aiResult.assigned_to_staff_id) {
+            newStatus = 'analyzed'; // Assegnato dall'AI
+        }
         
-        // 4. Aggiorna l'email nel DB con i risultati dell'AI
-        const { error: updateError } = await supabaseAdmin.from('incoming_emails').update({
+        // 3. Aggiorna l'email nel DB con i risultati dell'AI (status, assigned_to_staff_id, etc. e is_urgent)
+        console.log(`MAIL_PROCESSOR: Updating email ID ${emailRecordId} in DB with AI results. New status: ${newStatus}, Is Urgent: ${aiResult.is_urgent}`);
+        const { error: updateAIError } = await supabaseAdmin.from('incoming_emails').update({
             assigned_to_staff_id: aiResult.assigned_to_staff_id,
             ai_confidence_score: aiResult.ai_confidence_score,
             ai_reasoning: aiResult.ai_reasoning,
-            status: aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review', // Se l'AI non assegna, richiede revisione manuale
+            status: newStatus,
+            is_urgent: aiResult.is_urgent, // AGGIUNGI QUI is_urgent
         }).eq('id', emailRecordId);
 
-        if (updateError) throw new Error(`Supabase AI update error: ${updateError.message}`);
-        console.log(`AI analysis updated for email ID ${emailRecordId}. Assigned to staff: ${aiResult.assigned_to_staff_id || 'N/A'}`);
+        if (updateAIError) {
+            console.error(`MAIL_PROCESSOR: ERROR updating email ID ${emailRecordId} with AI results: ${updateAIError.message}`);
+            throw new Error(`Supabase AI update error: ${updateAIError.message}`);
+        }
+        console.log(`MAIL_PROCESSOR: AI analysis results successfully updated for email ID ${emailRecordId}.`);
 
-        // 5. Inoltra l'email al destinatario suggerito dall'AI
+        // 4. Inoltra l'email al destinatario suggerito dall'AI, se presente
         if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+            console.log(`MAIL_PROCESSOR: Attempting to forward email ID ${emailRecordId} to ${aiResult.assignedStaffEmail} (Assigned to: ${aiResult.assignedStaffName})...`);
             try {
+                const { data: attachmentsToForward, error: fetchAttachError } = await supabaseAdmin
+                    .from('email-attachments')
+                    .select('filename, mimetype, storage_path')
+                    .eq('email_id', emailRecordId);
+
+                let sendgridAttachments = [];
+                if (fetchAttachError) {
+                    console.error(`MAIL_PROCESSOR: ERROR fetching attachments for forwarding (email ID ${emailRecordId}):`, fetchAttachError.message);
+                } else if (attachmentsToForward && attachmentsToForward.length > 0) {
+                    console.log(`MAIL_PROCESSOR: Found ${attachmentsToForward.length} attachments to prepare for forwarding.`);
+                    for (const attachMeta of attachmentsToForward) {
+                        try {
+                            const { data: downloadedBlob, error: downloadError } = await supabaseAdmin.storage
+                                .from('email-attachments')
+                                .download(attachMeta.storage_path);
+
+                            if (downloadError) {
+                                console.error(`MAIL_PROCESSOR: ERROR downloading attachment "${attachMeta.filename}" for forwarding:`, downloadError.message);
+                                continue;
+                            }
+
+                            if (!(downloadedBlob instanceof Blob)) {
+                                console.error(`MAIL_PROCESSOR: Expected Blob, received different type for "${attachMeta.filename}". Skipping attachment preparation.`);
+                                continue;
+                            }
+
+                            const arrayBuffer = await downloadedBlob.arrayBuffer();
+                            const bufferContent = Buffer.from(arrayBuffer);
+                            const contentBase64 = bufferContent.toString('base64');
+                            
+                            sendgridAttachments.push({
+                                content: contentBase64,
+                                filename: attachMeta.filename,
+                                type: attachMeta.mimetype,
+                                disposition: 'attachment',
+                            });
+                            console.log(`MAIL_PROCESSOR: Attachment "${attachMeta.filename}" prepared for SendGrid.`);
+
+                        } catch (downloadOrEncodeError) {
+                            console.error(`MAIL_PROCESSOR: ERROR preparing attachment "${attachMeta.filename}" for SendGrid:`, downloadOrEncodeError.message || downloadOrEncodeError);
+                        }
+                    }
+                }
+                
                 await sendEmail(
                     aiResult.assignedStaffEmail,
-                    email.from.split('<')[0].trim() || email.from, // Nome del mittente
-                    email.from, // Indirizzo email del mittente originale
+                    email.from.split('<')[0].trim() || email.from,
+                    email.from,
                     email.subject,
-                    email.text || email.html, // Invia il testo o l'HTML originale
-                    aiResult.ai_reasoning
+                    email.text || email.html,
+                    aiResult.ai_reasoning,
+                    sendgridAttachments // PASSIAMO GLI ALLEGATI QUI
                 );
 
-                // Aggiorna lo stato a 'forwarded' nel DB
                 const { error: forwardStatusError } = await supabaseAdmin.from('incoming_emails').update({
                     status: 'forwarded',
-                    // Non ci sono campi forwarded_to_email o forwarded_at nel tuo DB schema
                 }).eq('id', emailRecordId);
 
-                if (forwardStatusError) console.error(`Error updating forwarded status for ID ${emailRecordId}:`, forwardStatusError.message);
-                console.log(`Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail}`);
+                if (forwardStatusError) {
+                    console.error(`MAIL_PROCESSOR: ERROR updating status to 'forwarded' for ID ${emailRecordId}:`, forwardStatusError.message);
+                } else {
+                    console.log(`MAIL_PROCESSOR: Email ID ${emailRecordId} successfully forwarded to ${aiResult.assignedStaffEmail} and status updated to 'forwarded'.`);
+                }
 
             } catch (forwardError) {
-                console.error(`Error forwarding email ID ${emailRecordId}:`, forwardError);
-                // Aggiorna lo stato a 'forward_error' nel DB
+                console.error(`MAIL_PROCESSOR: ERROR forwarding email ID ${emailRecordId}:`, forwardError);
                 await supabaseAdmin.from('incoming_emails').update({
                     status: 'forward_error',
-                    // Potresti aggiungere un campo 'error_details' per salvare l'errore completo
                 }).eq('id', emailRecordId);
+                console.log(`MAIL_PROCESSOR: Status for email ID ${emailRecordId} updated to 'forward_error'.`);
             }
         } else {
-            console.warn(`Email ID ${emailRecordId} not assigned by AI or missing staff email. Status set to 'manual_review'.`);
+            console.warn(`MAIL_PROCESSOR: Email ID ${emailRecordId} not assigned by AI or missing staff email. No forwarding attempted. Status remains '${newStatus}'.`);
         }
 
       } catch (innerError) {
-        console.error(`Error processing single email (ID ${emailRecordId || 'N/A'}):`, innerError);
-        // Se si verifica un errore prima di salvare l'email o durante il primo salvataggio,
-        // emailRecordId potrebbe essere null. Gestisci di conseguenza.
+        console.error(`MAIL_PROCESSOR: Critical ERROR processing single email (ID ${emailRecordId || 'N/A'}):`, innerError.message);
         if (emailRecordId) {
+            console.log(`MAIL_PROCESSOR: Attempting to update email ID ${emailRecordId} status to 'processing_error'.`);
             await supabaseAdmin.from('incoming_emails').update({
                 status: 'processing_error',
-                // error_message: innerError.message, // Se aggiungi un campo per i messaggi di errore
             }).eq('id', emailRecordId);
+            console.log(`MAIL_PROCESSOR: Status for email ID ${emailRecordId} updated to 'processing_error'.`);
         }
       }
     }
   } catch (globalError) {
-    console.error('Global error during email processing cycle:', globalError);
+    console.error('MAIL_PROCESSOR: Global ERROR during email processing cycle:', globalError);
   }
-  console.log('Email processing cycle finished.');
+  console.log('MAIL_PROCESSOR: Email processing cycle finished.');
 }

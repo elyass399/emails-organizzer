@@ -7,8 +7,9 @@ export default defineEventHandler(async (event) => {
   const supabase = await serverSupabaseClient(event);
 
   const { data, error } = await supabase
+    // Modifica qui: seleziona le nuove colonne
     .from('staff')
-    .select('id, name, email, responsibilities')
+    .select('id, name, email, text_skills, skills') // Aggiungi text_skills e skills
     .order('name', { ascending: true });
 
   if (error) {
