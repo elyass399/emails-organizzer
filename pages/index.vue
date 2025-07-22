@@ -16,7 +16,6 @@ import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
 
 // Importa le icone necessarie per il refresh e i bottoni staff
-// MODIFICA QUI: Aggiunto AlertTriangle
 import { RefreshCw, Users, Edit, List, AlertTriangle } from 'lucide-vue-next';
 
 
@@ -43,9 +42,14 @@ const updateStaffForm = reactive({ // Form per la modifica del testo delle skill
   text_skills: '',
 });
 
-// Stato per la modale di VISUALIZZAZIONE staff
+// NUOVO STATO per la modale di VISUALIZZAZIONE staff
 const showViewStaffDialog = ref(false); // NUOVO STATO PER LA NUOVA MODALE
-const isLoadingStaff = ref(true);
+const isLoadingStaff = ref(true); // Stato di caricamento per la lista staff
+
+// Stato e dati per la modale di VISUALIZZAZIONE clienti
+const showViewClientsDialog = ref(false);
+const allClients = ref([]); // Lista completa dei clienti
+const isLoadingClients = ref(true);
 
 
 // Computed per ottenere il nome e l'email del dipendente selezionato nella modale di modifica
@@ -115,6 +119,26 @@ const fetchAllStaff = async () => {
   }
 };
 
+// NUOVA FUNZIONE: Carica la lista completa dei clienti
+const fetchAllClients = async () => {
+  isLoadingClients.value = true;
+  try {
+    const data = await $fetch('/api/clients'); // Chiamata al nuovo endpoint
+    allClients.value = data || [];
+  } catch (error) {
+    console.error("Impossibile caricare la lista clienti:", error);
+    toast({
+      title: 'Errore',
+      description: 'Impossibile caricare la lista dei clienti.',
+      variant: 'destructive',
+    });
+    allClients.value = [];
+  } finally {
+    isLoadingClients.value = false;
+  }
+};
+
+
 // Funzione per gestire la selezione di un dipendente nella dropdown di modifica
 const handleStaffSelectionChange = () => {
   const selectedStaff = allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value);
@@ -132,7 +156,6 @@ const viewEmailContent = (email) => {
 };
 
 const addStaff = async () => {
-  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI (per addStaff) ---
   console.log('Frontend: addStaff function called on submit.');
   console.log('Frontend: newStaffForm data:', {
     name: newStaffForm.name,
@@ -149,7 +172,6 @@ const addStaff = async () => {
     console.error('Frontend: Errore: Campi addStaff mancanti/vuoti.');
     return;
   }
-  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
 
   try {
     const response = await $fetch('/api/staff', {
@@ -197,9 +219,14 @@ const openViewStaffDetailsDialog = async () => {
   showViewStaffDialog.value = true;
 };
 
+// NUOVA FUNZIONE: per aprire la modale di VISUALIZZAZIONE CLIENTI
+const openViewClientsDialog = async () => {
+  await fetchAllClients(); // Carica la lista piÃ¹ recente dei clienti
+  showViewClientsDialog.value = true;
+};
+
 
 const updateStaff = async () => {
-  // --- INIZIO LOG E VALIDAZIONE AGGIUNTA QUI ---
   console.log('Frontend: updateStaff function called.');
   console.log('Frontend: selectedStaffIdToUpdate:', selectedStaffIdToUpdate.value);
   console.log('Frontend: updateStaffForm.text_skills:', updateStaffForm.text_skills);
@@ -222,16 +249,12 @@ const updateStaff = async () => {
     console.error('Frontend: Errore: Il campo Descrizione Competenze Ã¨ vuoto.');
     return;
   }
-  // --- FINE LOG E VALIDAZIONE AGGIUNTA QUI ---
-
 
   console.log('updateStaff function called for ID:', selectedStaffIdToUpdate.value);
   try {
-    // --- LOG AGGIUNTO QUI PRIMA DELLA CHIAMATA FETCH ---
     console.log('Frontend: Tentativo di inviare richiesta PUT per aggiornare staff...');
     console.log('Frontend: URL della richiesta:', `/api/staff/${selectedStaffIdToUpdate.value}`);
     console.log('Frontend: Body della richiesta:', { text_skills: updateStaffForm.text_skills });
-    // --- FINE LOG AGGIUNTO QUI ---
 
     const response = await $fetch(`/api/staff/${selectedStaffIdToUpdate.value}`, {
       method: 'PUT',
@@ -293,32 +316,41 @@ const getStatusLabel = (status) => {
     case 'ai_error': return 'Errore AI';
     case 'forward_error': return 'Errore Inoltro';
     case 'processing_error': return 'Errore Elaborazione';
+    case 'processed_follow_up': return 'Dati Cliente Aggiornati';
     default: return status;
   }
 };
 
 const getStaffBadgeVariant = (staffName) => {
-  // Ritorna sempre la variante 'secondary' per i badge dello staff
   return 'secondary';
 };
 
-// NUOVA FUNZIONE per ottenere le classi CSS per le righe urgenti
 const getRowUrgencyClass = (isUrgent) => {
   return isUrgent ? 'border-l-4 border-red-500 bg-red-50' : '';
 };
 
-// NUOVA FUNZIONE per ottenere il badge di urgenza
 const getUrgencyBadge = (isUrgent) => {
   if (isUrgent) {
     return {
       text: 'URGENTE',
-      variant: 'destructive', // Usa la variante 'destructive' per il badge rosso
-      icon: AlertTriangle // L'icona del triangolo d'allerta
+      variant: 'destructive',
+      icon: AlertTriangle
     };
   }
-  return null; // Restituisce null se non Ã¨ urgente
+  return null;
 };
 
+// Funzione per formattare lo stato del follow-up email
+const formatFollowUpStatus = (client) => {
+  if (client.follow_up_email_sent) {
+    return `Inviata il ${formatDate(client.follow_up_sent_at)}`;
+  }
+  const hasAllInfo = client.name && client.phone_number && client.city;
+  if (hasAllInfo) {
+    return 'Completi';
+  }
+  return 'Mancanti';
+};
 
 // --- HOOK ---
 onMounted(async () => {
@@ -332,7 +364,7 @@ onMounted(async () => {
 
     <h1 class="text-2xl font-bold mb-4">Gestione Email Intelligente</h1>
 
-    <!-- Pulsanti "Aggiungi", "Modifica" e "Visualizza" Dipendente/Ufficio (allineati a destra) -->
+    <!-- Pulsanti "Aggiungi", "Modifica", "Visualizza Dipendenti" e "Visualizza Clienti" (allineati a destra) -->
     <div class="flex justify-end gap-2 mb-4">
       <Button variant="outline" @click="showAddStaffDialog = true" class="shrink-0">
         <Users class="h-4 w-4 mr-2" />
@@ -346,6 +378,11 @@ onMounted(async () => {
       <Button variant="outline" @click="openViewStaffDetailsDialog" class="shrink-0">
         <List class="h-4 w-4 mr-2" />
         Visualizza Dipendenti/Uffici
+      </Button>
+      <!-- NUOVO BOTTONE PER VISUALIZZARE CLIENTI -->
+      <Button variant="outline" @click="openViewClientsDialog" class="shrink-0">
+        <List class="h-4 w-4 mr-2" />
+        Visualizza Clienti
       </Button>
     </div>
 
@@ -386,7 +423,6 @@ onMounted(async () => {
                 :class="getRowUrgencyClass(email.is_urgent)"
               >
                 <TableCell class="font-medium text-left">
-                  <!-- NUOVA PARTE: Icona di urgenza accanto al mittente -->
                   <div class="flex items-center gap-2">
                     <AlertTriangle v-if="email.is_urgent" class="h-4 w-4 text-red-600" title="Email Urgente" />
                     <div>
@@ -408,7 +444,6 @@ onMounted(async () => {
                 <TableCell class="text-center">
                   <div class="flex flex-col items-center gap-1">
                     <span>{{ getStatusLabel(email.status) }}</span>
-                    <!-- NUOVA PARTE: Badge di urgenza sotto lo stato -->
                     <Badge v-if="getUrgencyBadge(email.is_urgent)" :variant="getUrgencyBadge(email.is_urgent).variant">
                       {{ getUrgencyBadge(email.is_urgent).text }}
                     </Badge>
@@ -436,7 +471,6 @@ onMounted(async () => {
     </Card>
 
     <!-- Modale per visualizzare contenuto email -->
-    <!-- Modale per visualizzare contenuto email in pages/index.vue -->
 <Dialog :open="showContentModal" @update:open="showContentModal = false">
   <DialogContent v-if="selectedEmailContent" class="dialog-content-force-white">
       <DialogHeader>
@@ -622,6 +656,52 @@ onMounted(async () => {
 
         <DialogFooter>
           <Button type="button" variant="outline" @click="showViewStaffDialog = false">Chiudi</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+
+    <!-- NUOVA MODALE PER VISUALIZZARE CLIENTI -->
+    <Dialog :open="showViewClientsDialog" @update:open="showViewClientsDialog = $event">
+      <DialogContent class="dialog-content-force-white max-w-7xl w-11/12">
+        <DialogHeader>
+          <DialogTitle>Elenco Clienti</DialogTitle>
+          <DialogDescription>
+            Dettagli di tutti i clienti e lo stato delle loro informazioni.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div v-if="isLoadingClients" class="text-center py-8">
+          <p class="text-muted-foreground">Caricamento lista clienti...</p>
+        </div>
+        <div v-else-if="allClients.length > 0" class="max-h-[500px] overflow-y-auto overflow-x-auto">
+          <Table class="min-w-full">
+            <TableHeader>
+              <TableRow>
+                <TableHead class="w-[20%] min-w-[150px]">Email</TableHead>
+                <TableHead class="w-[20%] min-w-[150px]">Nome</TableHead>
+                <TableHead class="w-[15%] min-w-[120px]">Telefono</TableHead>
+                <TableHead class="w-[15%] min-w-[120px]">Comune</TableHead>
+                <TableHead class="w-[30%] min-w-[200px]">Follow-up</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="client in allClients" :key="client.id">
+                <TableCell class="font-medium break-all">{{ client.email }}</TableCell>
+                <TableCell>{{ client.name || 'N/D' }}</TableCell>
+                <TableCell>{{ client.phone_number || 'N/D' }}</TableCell>
+                <TableCell>{{ client.city || 'N/D' }}</TableCell>
+                <TableCell>{{ formatFollowUpStatus(client) }}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+        <div v-else class="text-center py-8">
+          <p class="text-muted-foreground">Nessun cliente trovato.</p>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" @click="showViewClientsDialog = false">Chiudi</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -103,7 +103,7 @@ export async function fetchNewEmails(config) {
                 stream.once('end', async () => {
                   try {
                     const parsed = await simpleParser(buffer);
-
+console.log('Parsing email with simpleParser:', parsed || 'No subject');
                     // --- NUOVI LOG PER DEBUG ALLEGATI ---
                     console.log(`IMAP: Message #${seqno} parsed. Attachments count: ${parsed.attachments ? parsed.attachments.length : 0}`);
                     if (parsed.attachments && parsed.attachments.length > 0) {
@@ -116,6 +116,7 @@ export async function fetchNewEmails(config) {
                     messageResolve({
                       uid: currentUid,
                       messageId: parsed.messageId,
+                      references: parsed.references ? (Array.isArray(parsed.references) ? parsed.references[0] ||  parsed.inReplyTo ||  parsed.messageID : parsed.references) : null,
                       from: parsed.from?.text,
                       to: parsed.to?.text,
                       subject: parsed.subject,
