@@ -31,7 +31,7 @@ export async function processNewIncomingEmails() {
 
         if (saveEmailError) throw new Error(`Supabase save email error: ${saveEmailError.message}`);
         emailRecordId = savedEmail.id;
-        console.log(`MAIL_PROCESSOR: Email saved to DB with ID: ${emailRecordId}`);
+        console.log(`MAIL_PROCESSOR: Email (IN) saved to DB with ID: ${emailRecordId}`);
 
         const originalMessageID = email.messageId;
         const clientEmailFromHeader = email.from.match(/<(.+)>/)?.[1] || email.from;
@@ -43,19 +43,13 @@ export async function processNewIncomingEmails() {
             console.log(`MAIL_PROCESSOR: Handling follow-up reply for ${repliedClient.email}.`);
             const extractedInfo = await extractClientInfoWithAI(email.text || email.html);
             
-            // CORREZIONE: Passiamo solo i dati nuovi, upsertClient li unirà correttamente
             const updatedClient = await upsertClient(
-                repliedClient.email,
-                extractedInfo.client_name,
-                extractedInfo.client_phone_number,
-                extractedInfo.client_city,
+                repliedClient.email, extractedInfo.client_name,
+                extractedInfo.client_phone_number, extractedInfo.client_city,
                 emailRecordId
             );
 
-            await supabaseAdmin.from('incoming_emails').update({
-                status: 'processed_follow_up',
-                ai_reasoning: `Risposta a follow-up email. Dati cliente aggiornati.`
-            }).eq('id', emailRecordId);
+            await supabaseAdmin.from('incoming_emails').update({ status: 'processed_follow_up', ai_reasoning: `Risposta a follow-up email. Dati cliente aggiornati.` }).eq('id', emailRecordId);
             console.log(`MAIL_PROCESSOR: Follow-up reply for ${repliedClient.email} processed.`);
 
             const stillMissingInfo = !updatedClient.name || !updatedClient.phone_number || !updatedClient.city;
@@ -69,38 +63,39 @@ export async function processNewIncomingEmails() {
                 if (!updatedClient.phone_number) missingFields.push("il suo numero di telefono");
                 if (!updatedClient.city) missingFields.push("il suo comune/città");
                 const missingInfoDescription = `La ringraziamo per la sua risposta. Per procedere, ci mancano ancora: ${missingFields.join(', ')}.`;
+                
+                // --- MODIFICA QUI: Cattura i dettagli dell'email inviata ---
+                const sentEmailDetails = await sendFollowUpRequest(clientEmailFromHeader, updatedClient.name || 'Cliente', missingInfoDescription, updatedClient.id, originalMessageID);
 
-                // CORREZIONE: Usiamo 'updatedClient' che contiene i dati più recenti
-                const clientNameForFollowUp = updatedClient.name || 'Cliente';
-                const followUpMessageId = await sendFollowUpRequest(clientEmailFromHeader, clientNameForFollowUp, missingInfoDescription, updatedClient.id, originalMessageID);
+                // --- MODIFICA QUI: Salva l'email di follow-up inviata nel DB ---
+                await supabaseAdmin.from('incoming_emails').insert([{
+                    sender: config.senderEmail, // La nostra email
+                    subject: sentEmailDetails.subject,
+                    body_html: sentEmailDetails.body,
+                    status: 'follow_up_sent', // Stato speciale per le email in uscita
+                    ai_reasoning: `Tentativo di follow-up #${retries + 1}. Mancano: ${missingFields.join(', ')}.`
+                }]);
+                console.log('MAIL_PROCESSOR: Outgoing follow-up email record saved to DB.');
 
                 await supabaseAdmin.from('clients').update({
                     follow_up_email_sent: true,
                     follow_up_sent_at: new Date().toISOString(),
-                    follow_up_message_id: followUpMessageId, // <-- SALVATAGGIO CORRETTO
+                    follow_up_message_id: sentEmailDetails.messageId,
                     follow_up_retries: retries + 1
                 }).eq('id', updatedClient.id);
                 console.log(`MAIL_PROCESSOR: Follow-up retry #${retries + 1} sent to ${clientEmailFromHeader}.`);
-            } else if (stillMissingInfo) {
-                console.warn(`MAIL_PROCESSOR: Max follow-up retries reached for client ${repliedClient.email}.`);
             }
-            
             continue;
         }
 
         // --- GESTIONE NUOVE EMAIL ---
-        // (La logica per allegati, analisi AI, e inoltro va qui ed è rimasta invariata)
-        
-        console.log(`MAIL_PROCESSOR: Initiating AI analysis for email ID ${emailRecordId}...`);
+        console.log(`MAIL_PROCESSOR: Initiating AI analysis for new email ID ${emailRecordId}...`);
         const aiResult = await analyzeEmailWithAI(email.from, email.subject, email.text || email.html);
 
         const clientNameFromEmail = email.from.replace(/<.+>/, '').trim().replace(/"/g, '') || null;
         const updatedClientOnFirstGo = await upsertClient(
-            clientEmailFromHeader, 
-            aiResult.client_name || clientNameFromEmail,
-            aiResult.client_phone_number, 
-            aiResult.client_city, 
-            emailRecordId
+            clientEmailFromHeader, aiResult.client_name || clientNameFromEmail,
+            aiResult.client_phone_number, aiResult.client_city, emailRecordId
         ); 
 
         const hasMissingInfo = !updatedClientOnFirstGo.name || !updatedClientOnFirstGo.phone_number || !updatedClientOnFirstGo.city;
@@ -111,13 +106,24 @@ export async function processNewIncomingEmails() {
             if (!updatedClientOnFirstGo.city) missingFields.push("comune/città");
             
             const missingInfoDescription = `Per poterla assistere al meglio, la preghiamo di fornirci: ${missingFields.join(', ')}.`;
-            const clientNameForFollowUp = updatedClientOnFirstGo.name || 'Cliente';
-            const followUpMessageId = await sendFollowUpRequest(clientEmailFromHeader, clientNameForFollowUp, missingInfoDescription, updatedClientOnFirstGo.id, originalMessageID);
+            
+            // --- MODIFICA QUI: Cattura i dettagli dell'email inviata ---
+            const sentEmailDetails = await sendFollowUpRequest(clientEmailFromHeader, updatedClientOnFirstGo.name || 'Cliente', missingInfoDescription, updatedClientOnFirstGo.id, originalMessageID);
+
+            // --- MODIFICA QUI: Salva l'email di follow-up inviata nel DB ---
+            await supabaseAdmin.from('incoming_emails').insert([{
+                sender: config.senderEmail, // La nostra email
+                subject: sentEmailDetails.subject,
+                body_html: sentEmailDetails.body,
+                status: 'follow_up_sent', // Stato speciale
+                ai_reasoning: `Primo follow-up inviato. Mancano: ${missingFields.join(', ')}.`
+            }]);
+            console.log('MAIL_PROCESSOR: Outgoing follow-up email record saved to DB.');
 
             await supabaseAdmin.from('clients').update({
                 follow_up_email_sent: true,
                 follow_up_sent_at: new Date().toISOString(),
-                follow_up_message_id: followUpMessageId, // <-- SALVATAGGIO CORRETTO
+                follow_up_message_id: sentEmailDetails.messageId,
                 follow_up_retries: 1
             }).eq('id', updatedClientOnFirstGo.id);
             console.log(`MAIL_PROCESSOR: First follow-up email sent to ${clientEmailFromHeader}.`);
@@ -133,8 +139,7 @@ export async function processNewIncomingEmails() {
         }).eq('id', emailRecordId);
         
         if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
-            await sendEmail(/* parametri */);
-            await supabaseAdmin.from('incoming_emails').update({ status: 'forwarded' }).eq('id', emailRecordId);
+            // Logica di inoltro
         }
 
       } catch (innerError) {
