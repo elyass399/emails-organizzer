@@ -21,9 +21,9 @@ const { toasts } = useToast()
             {{ toast.description }}
           </ToastDescription>
         </template>
-        <ToastClose />
       </div>
       <component :is="toast.action" />
+      <ToastClose />
     </Toast>
     <ToastViewport />
   </ToastProvider>

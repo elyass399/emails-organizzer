@@ -10,7 +10,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/toast/use-toast';
 import { Toaster } from '@/components/ui/toast';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { RefreshCw, Users, Edit, List, LogOut, LoaderCircle, Mail, Inbox, UserCheck, Send } from 'lucide-vue-next';
 
 // --- AUTH & RUOLI ---
@@ -27,7 +26,7 @@ const handleLogout = async () => {
   router.push('/login');
 };
 
-// --- STATI (con shallowRef per le liste) ---
+// --- STATI ---
 const processedEmails = shallowRef([]);
 const { toast } = useToast();
 const allStaffMembers = shallowRef([]);
@@ -61,12 +60,13 @@ const selectedEmail = ref(null);
 const conversationHistory = ref([]);
 const replyText = ref('');
 const isReplying = ref(false);
+const showStaffMenuDialog = ref(false);
 
 const currentSelectedStaff = computed(() => {
   return allStaffMembers.value.find(staff => staff.id === selectedStaffIdToUpdate.value) || {};
 });
 
-// --- FUNZIONE fetchData (Unica Fonte di Verità) ---
+// --- FUNZIONE fetchData ---
 const fetchData = async () => {
   isLoadingData.value = true;
   if (!user.value) { isLoadingData.value = false; return; }
@@ -80,13 +80,11 @@ const fetchData = async () => {
       staffId.value = null;
     }
     const [emailsData, allStaffData, clientsData] = await Promise.all([$fetch('/api/inbox'), $fetch('/api/staff'), $fetch('/api/clients')]);
-    
     processedEmails.value = emailsData || [];
     allStaffMembers.value = allStaffData || [];
     allClients.value = clientsData || [];
-
   } catch (error) {
-    toast({ title: 'Errore', description: 'Impossibile caricare i dati.', variant: 'destructive' });
+    toast({ title: 'Errore', description: 'Impossibile caricare i dati.', variant: 'destructive', duration: 5000 });
   } finally {
     isLoadingData.value = false;
   }
@@ -97,15 +95,15 @@ watch(user, (newUser) => { if (newUser) { fetchData(); } }, { immediate: true })
 // --- FUNZIONI DI GESTIONE ---
 const addStaff = async () => {
   if (!newStaffForm.name || !newStaffForm.text_skills || !newStaffForm.user_id) {
-    return toast({ title: 'Campi mancanti', description: 'Tutti i campi sono obbligatori.', variant: 'destructive' });
+    return toast({ title: 'Campi mancanti', description: 'Tutti i campi sono obbligatori.', variant: 'destructive', duration: 5000 });
   }
   try {
     await $fetch('/api/staff', { method: 'POST', body: newStaffForm });
-    toast({ title: 'Successo!', description: 'Nuovo membro dello staff aggiunto.' });
+    toast({ title: 'Successo!', description: 'Nuovo membro dello staff aggiunto.', duration: 5000 });
     showAddStaffDialog.value = false;
     await fetchData();
   } catch (error) {
-    toast({ title: 'Errore', description: error.data?.statusMessage || 'Si è verificato un problema.', variant: 'destructive' });
+    toast({ title: 'Errore', description: error.data?.statusMessage || 'Si è verificato un problema.', variant: 'destructive', duration: 5000 });
   }
 };
 
@@ -113,11 +111,11 @@ const updateStaff = async () => {
   if (!selectedStaffIdToUpdate.value) return;
   try {
     await $fetch(`/api/staff/${selectedStaffIdToUpdate.value}`, { method: 'PUT', body: { text_skills: updateStaffForm.text_skills } });
-    toast({ title: 'Successo!', description: 'Competenze aggiornate.' });
+    toast({ title: 'Successo!', description: 'Competenze aggiornate.', duration: 5000 });
     showUpdateStaffDialog.value = false;
     await fetchData();
   } catch (error) {
-    toast({ title: 'Errore', description: error.data?.statusMessage || 'Impossibile aggiornare.', variant: 'destructive' });
+    toast({ title: 'Errore', description: error.data?.statusMessage || 'Impossibile aggiornare.', variant: 'destructive', duration: 5000 });
   }
 };
 
@@ -134,7 +132,7 @@ const openAddStaffDialog = async () => {
     try {
         usersWithoutStaffProfile.value = await $fetch('/api/users');
     } catch (error) {
-        toast({ title: 'Errore', description: "Impossibile caricare l'elenco utenti.", variant: 'destructive' });
+        toast({ title: 'Errore', description: "Impossibile caricare l'elenco utenti.", variant: 'destructive', duration: 5000 });
     } finally {
         isLoadingUsers.value = false;
     }
@@ -182,11 +180,11 @@ const sendReply = async () => {
       id: Date.now(), sender: 'Tu (Studio)', body: replyText.value,
       date: new Date().toISOString(), isOwn: true
     });
-    toast({ title: 'Successo!', description: 'Risposta inviata al cliente.' });
+    toast({ title: 'Successo!', description: 'Risposta inviata al cliente.', duration: 5000 });
     replyText.value = '';
     await fetchData();
   } catch (error) {
-    toast({ title: 'Errore', description: 'Impossibile inviare la risposta.', variant: 'destructive' });
+    toast({ title: 'Errore', description: 'Impossibile inviare la risposta.', variant: 'destructive', duration: 5000 });
   } finally {
     isReplying.value = false;
   }
@@ -214,7 +212,6 @@ const formatFollowUpStatus = (client) => {
   <div class="min-h-screen bg-gray-50/50">
     <Toaster />
 
-    <!-- HEADER FISSO -->
     <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
       <div class="container mx-auto flex justify-between items-center p-4">
         <h1 class="text-xl font-bold text-gray-800">Dashboard</h1>
@@ -230,7 +227,6 @@ const formatFollowUpStatus = (client) => {
       </div>
     </header>
 
-    <!-- CONTENUTO PRINCIPALE -->
     <main class="container mx-auto p-4 md:p-8 space-y-8">
       
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -258,14 +254,7 @@ const formatFollowUpStatus = (client) => {
             <Edit class="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent class="flex items-center justify-center gap-2 pt-4">
-              <DropdownMenu>
-                <DropdownMenuTrigger as-child><Button variant="outline" class="flex-1"><Users class="h-4 w-4 mr-2" />Staff</Button></DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem @click="openViewStaffDialog"><List class="h-4 w-4 mr-2" />Visualizza Elenco</DropdownMenuItem>
-                  <DropdownMenuItem @click="openUpdateStaffDialog"><Edit class="h-4 w-4 mr-2" />Modifica Competenze</DropdownMenuItem>
-                  <DropdownMenuItem @click="openAddStaffDialog"><Users class="h-4 w-4 mr-2" />Aggiungi Nuovo</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <Button @click="showStaffMenuDialog = true" variant="outline" class="flex-1"><Users class="h-4 w-4 mr-2" />Staff</Button>
               <Button @click="openViewClientsDialog" variant="outline" class="flex-1"><List class="h-4 w-4 mr-2" />Clienti</Button>
           </CardContent>
         </Card>
@@ -297,6 +286,27 @@ const formatFollowUpStatus = (client) => {
         </CardContent>
       </Card>
 
+      <!-- NUOVA MODALE-MENU PER LO STAFF -->
+      <Dialog :open="showStaffMenuDialog" @update:open="showStaffMenuDialog = $event">
+        <DialogContent class="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Gestione Staff</DialogTitle>
+            <DialogDescription>Seleziona un'azione da eseguire.</DialogDescription>
+          </DialogHeader>
+          <div class="grid gap-3 py-4">
+            <Button variant="outline" class="w-full justify-start p-6" @click="() => { showStaffMenuDialog = false; openViewStaffDialog(); }">
+              <List class="h-4 w-4 mr-2" />Visualizza Elenco
+            </Button>
+            <Button variant="outline" class="w-full justify-start p-6" @click="() => { showStaffMenuDialog = false; openUpdateStaffDialog(); }">
+              <Edit class="h-4 w-4 mr-2" />Modifica Competenze
+            </Button>
+            <Button variant="outline" class="w-full justify-start p-6" @click="() => { showStaffMenuDialog = false; openAddStaffDialog(); }">
+              <Users class="h-4 w-4 mr-2" />Aggiungi Nuovo
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      
       <!-- MODALE CONVERSAZIONE -->
       <Dialog :open="showConversationModal" @update:open="showConversationModal = false">
         <DialogContent v-if="selectedEmail" class="dialog-content-force-white sm:max-w-3xl p-0">
@@ -316,11 +326,9 @@ const formatFollowUpStatus = (client) => {
       
       <!-- MODALE AGGIUNGI STAFF -->
       <Dialog :open="showAddStaffDialog" @update:open="showAddStaffDialog = $event">
-        <DialogContent class="dialog-content-force-white">
-          <DialogHeader><DialogTitle>Aggiungi Nuovo Membro Staff</DialogTitle><DialogDescription>Seleziona un utente già registrato per creare il suo profilo staff.</DialogDescription></DialogHeader>
+        <DialogContent class="dialog-content-force-white"><DialogHeader><DialogTitle>Aggiungi Nuovo Membro Staff</DialogTitle><DialogDescription>Seleziona un utente già registrato per creare il suo profilo staff.</DialogDescription></DialogHeader>
           <div v-if="isLoadingUsers" class="text-center py-8"><LoaderCircle class="h-6 w-6 animate-spin mx-auto text-primary" /></div>
-          <form v-else @submit.prevent="addStaff">
-            <div class="grid gap-4 py-4">
+          <form v-else @submit.prevent="addStaff"><div class="grid gap-4 py-4">
               <div class="grid grid-cols-4 items-center gap-4">
                 <Label for="userSelect" class="text-right">Utente Registrato</Label>
                 <select id="userSelect" v-model="newStaffForm.user_id" required class="col-span-3 flex h-10 w-full rounded-md border p-2 bg-transparent">
@@ -346,8 +354,7 @@ const formatFollowUpStatus = (client) => {
       <Dialog :open="showUpdateStaffDialog" @update:open="showUpdateStaffDialog = $event">
         <DialogContent class="dialog-content-force-white">
           <DialogHeader><DialogTitle>Modifica Competenze</DialogTitle></DialogHeader>
-          <div v-if="isLoadingStaff" class="text-center py-8"><LoaderCircle class="h-6 w-6 animate-spin mx-auto text-primary" /></div>
-          <div v-else-if="!allStaffMembers.length" class="text-center py-8">Nessun dipendente da modificare.</div>
+          <div v-if="!allStaffMembers.length" class="text-center py-8">Nessun dipendente da modificare.</div>
           <form v-else @submit.prevent="updateStaff">
             <div class="grid gap-4 py-4">
               <div class="grid grid-cols-4 items-center gap-4">
@@ -369,8 +376,7 @@ const formatFollowUpStatus = (client) => {
       <!-- MODALE VISUALIZZA STAFF -->
       <Dialog :open="showViewStaffDialog" @update:open="showViewStaffDialog = $event">
         <DialogContent class="dialog-content-force-white max-w-4xl"><DialogHeader><DialogTitle>Elenco Dipendenti/Uffici</DialogTitle></DialogHeader>
-          <div v-if="isLoadingStaff" class="text-center py-8"><LoaderCircle class="h-6 w-6 animate-spin mx-auto text-primary" /></div>
-          <div v-else-if="!allStaffMembers.length" class="text-center py-8">Nessun dipendente trovato.</div>
+          <div v-if="!allStaffMembers.length" class="text-center py-8">Nessun dipendente trovato.</div>
           <div v-else class="max-h-[500px] overflow-y-auto">
             <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Email</TableHead><TableHead>Competenze</TableHead></TableRow></TableHeader>
               <TableBody><TableRow v-for="staff in allStaffMembers" :key="staff.id"><TableCell>{{ staff.name }}</TableCell><TableCell>{{ staff.email }}</TableCell><TableCell class="whitespace-normal">{{ staff.text_skills }}</TableCell></TableRow></TableBody>
@@ -383,8 +389,7 @@ const formatFollowUpStatus = (client) => {
       <!-- MODALE VISUALIZZA CLIENTI -->
       <Dialog :open="showViewClientsDialog" @update:open="showViewClientsDialog = $event">
         <DialogContent class="dialog-content-force-white max-w-5xl"><DialogHeader><DialogTitle>Elenco Clienti</DialogTitle></DialogHeader>
-          <div v-if="isLoadingClients" class="text-center py-8"><LoaderCircle class="h-6 w-6 animate-spin mx-auto text-primary" /></div>
-          <div v-else-if="!allClients.length" class="text-center py-8">Nessun cliente trovato.</div>
+          <div v-if="!allClients.length" class="text-center py-8">Nessun cliente trovato.</div>
           <div v-else class="max-h-[500px] overflow-y-auto">
             <Table><TableHeader><TableRow><TableHead>Email</TableHead><TableHead>Nome</TableHead><TableHead>Telefono</TableHead><TableHead>Comune</TableHead><TableHead>Follow-up</TableHead></TableRow></TableHeader>
               <TableBody><TableRow v-for="client in allClients" :key="client.id"><TableCell>{{ client.email }}</TableCell><TableCell>{{ client.name || 'N/D' }}</TableCell><TableCell>{{ client.phone_number || 'N/D' }}</TableCell><TableCell>{{ client.city || 'N/D' }}</TableCell><TableCell>{{ formatFollowUpStatus(client) }}</TableCell></TableRow></TableBody>
