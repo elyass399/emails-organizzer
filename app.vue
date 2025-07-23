@@ -1,27 +1,29 @@
-<!-- File: app.vue -->
 <template>
   <div>
-    <!-- Questo componente è utile per l'accessibilità, annuncia i cambi di pagina agli screen reader -->
     <NuxtRouteAnnouncer />
     
-    <!-- Questo è il componente più importante.
-         Nuxt renderizzerà qui il contenuto della pagina corrente (es. pages/index.vue) -->
-    <NuxtPage />
+    <!-- Applichiamo una transizione a livello globale -->
+    <NuxtPage :transition="{
+      name: 'page',
+      mode: 'out-in'
+    }" />
   </div>
 </template>
 
 <style>
-/* Aggiungiamo uno stile di base per lo sfondo, così l'app non è completamente bianca */
+/* Stili di base del corpo (li avevi già, li ho solo puliti) */
 body {
-  background-color: #f8f9fa; /* Un grigio molto chiaro */
-  color: #212529; /* Un nero morbido */
+  background-color: hsl(210 40% 98%);
+  color: hsl(222.2 84% 4.9%);
 }
 
-/* Stili per il tema scuro (opzionale, ma buona pratica) */
-@media (prefers-color-scheme: dark) {
-  body {
-    background-color: #f9f6f6; /* Un grigio scuro */
-    color: #060000; /* Un bianco sporco */
-  }
+/* Definiamo le animazioni per la transizione di pagina */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
 }
 </style>
