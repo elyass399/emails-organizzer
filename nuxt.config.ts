@@ -12,7 +12,15 @@ export default defineNuxtConfig({
   supabase: {
     url: process.env.SUPABASE_URL,
     key: process.env.NUXT_PUBLIC_SUPABASE_KEY,
-    redirect: false,
+    
+    redirect: true,
+    
+    redirectOptions: {
+      login: '/login',
+      callback: '/confirm',
+      // MODIFICA CHIAVE QUI: Dobbiamo escludere ENTRAMBE le pagine del flusso.
+      exclude: ['/forgot-password', '/update-password'], 
+    }
   },
 
   shadcn: {
@@ -30,11 +38,11 @@ export default defineNuxtConfig({
     imapUsername: process.env.IMAP_USERNAME,
     imapPassword: process.env.IMAP_PASSWORD,
     imapMailbox: process.env.IMAP_MAILBOX || 'INBOX',
+    
     public: {
+      baseUrl: process.env.NUXT_PUBLIC_BASE_URL || 'http://localhost:3000',
       supabaseUrl: process.env.SUPABASE_URL,
       supabaseAnonKey: process.env.NUXT_PUBLIC_SUPABASE_KEY,
     }
   },
-
-
 })

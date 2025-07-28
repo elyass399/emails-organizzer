@@ -4,13 +4,13 @@ import { reactiveOmit } from '@vueuse/core'
 import { X } from 'lucide-vue-next'
 import {
   DialogClose,
-  DialogContent, // Questo ora viene da radix-vue!
+  DialogContent,
   type DialogContentEmits,
   type DialogContentProps,
-  DialogOverlay, // Questo ora viene da radix-vue!
-  DialogPortal, // Questo ora viene da radix-vue!
+  DialogOverlay,
+  DialogPortal,
   useForwardPropsEmits,
-} from 'radix-vue' // <-- CAMBIATO DA reka-ui a radix-vue
+} from 'radix-vue'
 import { cn } from '@/lib/utils'
 
 const props = defineProps</* @vue-ignore */ DialogContentProps & { class?: HTMLAttributes['class'] }>()
@@ -27,6 +27,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits)
       <DialogContent
         :class="
           cn(
+            // RIPRISTINATO ALL'ORIGINALE: max-w-lg
             'relative z-50 grid w-full max-w-lg my-8 gap-4 border border-border bg-background p-6 shadow-lg duration-200 sm:rounded-lg md:w-full',
             props.class,
           )

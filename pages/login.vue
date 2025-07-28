@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-// La logica JavaScript del login rimane esattamente la stessa
 const supabase = useSupabaseClient();
 const router = useRouter();
 const email = ref('');
@@ -34,7 +33,6 @@ const handleLogin = async () => {
 <template>
   <div class="relative min-h-screen w-full flex items-center justify-center overflow-hidden">
     
-    <!-- VIDEO DI SFONDO PER IL LOGIN -->
     <video 
       autoplay 
       loop 
@@ -46,14 +44,15 @@ const handleLogin = async () => {
       Il tuo browser non supporta i video.
     </video>
     
-    <!-- Overlay scuro per migliorare la leggibilità del testo -->
     <div class="absolute z-10 inset-0 bg-black/50"></div>
 
-    <!-- CONTENUTO IN PRIMO PIANO -->
     <div class="relative z-20 flex flex-col items-center justify-center p-4">
       <div class="mb-8 text-center">
+        <!-- MODIFICA QUI: Aggiunto Logo -->
+        <img src="/images/logo.png" alt="FlashMail Logo" class="h-16 w-auto mx-auto mb-4">
+        
         <h1 class="text-5xl font-bold text-white [text-shadow:_0_2px_4px_rgb(0_0_0_/_40%)]">
-          Email Organizer
+          FlashMail
         </h1>
         <p class="text-gray-300 mt-2 [text-shadow:_0_1px_2px_rgb(0_0_0_/_30%)]">
           Il tuo assistente intelligente per la gestione della posta
@@ -79,7 +78,12 @@ const handleLogin = async () => {
               />
             </div>
             <div class="space-y-2">
-              <Label for="password" class="text-gray-300">Password</Label>
+              <div class="flex items-center justify-between">
+                <Label for="password" class="text-gray-300">Password</Label>
+                <NuxtLink to="/forgot-password" class="text-xs text-gray-400 hover:text-white hover:underline">
+                  Password dimenticata?
+                </NuxtLink>
+              </div>
               <Input
                 id="password"
                 type="password"
@@ -94,12 +98,7 @@ const handleLogin = async () => {
             <Button type="submit" class="w-full mt-4 bg-white text-gray-900 hover:bg-gray-200" :disabled="loading">
               {{ loading ? 'Accesso in corso...' : 'Accedi' }}
             </Button>
-            <div class="text-center mt-4 text-sm text-gray-400">
-              Non hai un account? 
-              <NuxtLink to="/register" class="font-semibold text-white hover:underline">
-                Registrati
-              </NuxtLink>
-            </div>
+            
           </form>
         </CardContent>
       </Card>

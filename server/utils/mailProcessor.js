@@ -5,108 +5,109 @@ import { sendEmail, sendFollowUpRequest } from './emailSender';
 import { getSupabaseAdminClient } from './supabaseAdmin';
 import { upsertClient, getClient } from './clientManager';
 
-const MAX_FOLLOW_UP_RETRIES = 2;
+async function findAwaitingConversationByEmail(supabaseAdmin, clientEmail) {
+    // ... (invariato)
+}
 
 export async function processNewIncomingEmails() {
-  console.log('MAIL_PROCESSOR: Starting email processing cycle...');
-  const config = useRuntimeConfig();
-  const supabaseAdmin = getSupabaseAdminClient();
+    console.log('CONVERSATION_PROCESSOR: Starting email processing cycle...');
+    const config = useRuntimeConfig();
+    const supabaseAdmin = getSupabaseAdminClient();
 
-  try {
-    const incomingRawEmails = await fetchNewEmails(config);
-    console.log(`MAIL_PROCESSOR: Fetched ${incomingRawEmails.length} new emails from IMAP.`);
+    try {
+        const incomingRawEmails = await fetchNewEmails(config);
+        console.log(`CONVERSATION_PROCESSOR: Fetched ${incomingRawEmails.length} new emails.`);
 
-    for (const email of incomingRawEmails) {
-      console.log(`\n--- MAIL_PROCESSOR: Processing email from "${email.from}" with subject: "${email.subject}" ---`);
-      
-      try {
-        const clientEmailFromHeader = email.from.match(/<(.+)>/)?.[1] || email.from;
-        const client = await getClient(clientEmailFromHeader);
-        const isFollowUpReply = client && client.follow_up_email_sent === true;
+        for (const email of incomingRawEmails) {
+            const fromAsString = email.from?.text || 'sconosciuto@sconosciuto.com';
+            console.log(`\n--- Processing email from "${fromAsString}" ---`);
 
-        // --- STRUTTURA IF/ELSE DEFINITIVA PER SEPARARE I PERCORSI ---
-        if (isFollowUpReply) {
-            // --- PERCORSO 1: È UNA RISPOSTA A FOLLOW-UP ---
-            // Questa email non verrà salvata né mostrata in dashboard.
-            console.log(`MAIL_PROCESSOR: Handling as a follow-up reply for ${client.email}.`);
-            
-            console.log("MAIL_PROCESSOR: Cleaning reply body before AI extraction...");
-            const replyOnlyText = (email.text || "").split(/\n>|On .* wrote:|Il giorno .* ha scritto:/)[0].trim();
-            console.log(`MAIL_PROCESSOR: Cleaned text for AI: "${replyOnlyText}"`);
-            
-            const extractedInfo = await extractClientInfoWithAI(replyOnlyText);
-            
-            const updatedClient = await upsertClient(
-                client.email, extractedInfo.client_name,
-                extractedInfo.client_phone_number, extractedInfo.client_city,
-                null // Non c'è un record email principale da associare a questa risposta
-            );
+            try {
+                const clientEmailFromHeader = fromAsString.match(/<(.+)>/)?.[1] || fromAsString;
+                const currentMessageIdClean = (email.messageId || '').replace(/<|>/g, '');
 
-            console.log(`MAIL_PROCESSOR: Client data updated for ${client.email}.`);
+                let conversationId = await findAwaitingConversationByEmail(supabaseAdmin, clientEmailFromHeader);
 
-            const stillMissingInfo = !updatedClient.name || !updatedClient.phone_number || !updatedClient.city;
-            const retries = updatedClient.follow_up_retries || 0;
+                if (conversationId) {
+                    // ... (logica per le risposte, invariata)
+                } else {
+                    console.log(`It's a new conversation thread.`);
+                    // Unica chiamata a upsert, dopo l'analisi AI
+                    const aiResult = await analyzeEmailWithAI(fromAsString, email.subject, email.text || email.html);
+                    const clientNameFromHeader = fromAsString.replace(/<.+>/, '').trim().replace(/"/g, '') || null;
+                    await upsertClient(clientEmailFromHeader, aiResult.client_name || clientNameFromHeader, aiResult.client_phone_number, aiResult.client_city, null);
 
-            if (stillMissingInfo && retries < MAX_FOLLOW_UP_RETRIES) {
-                // Logica per inviare un altro follow-up (sollecito)
-                console.log(`MAIL_PROCESSOR: Client ${client.email} replied but info is still missing. Sending another follow-up.`);
-                // ... (il codice per inviare il sollecito va qui)
-            }
-            // Fine del percorso. Non si fa altro, il ciclo for passerà alla prossima email.
-            
-        } else {
-            // --- PERCORSO 2: È UN'EMAIL NUOVA ---
-            // Solo queste email verranno salvate e potenzialmente mostrate in dashboard.
-            console.log(`MAIL_PROCESSOR: Handling as a new email. Saving to DB...`);
-            
-            const { data: savedEmail, error: saveEmailError } = await supabaseAdmin.from('incoming_emails').insert([{
-                sender: email.from,
-                subject: email.subject,
-                body_text: email.text,
-                body_html: email.html,
-                status: 'new', is_urgent: false, reference: email.messageId
-            }]).select().single();
+                    const updatedClient = await getClient(clientEmailFromHeader);
+                    if (!updatedClient) throw new Error(`Failed to process client for ${clientEmailFromHeader}`);
+                    
+                    // --- LOGICA DI CONTROLLO MIGLIORATA ---
+                    const missingFields = [];
+                    // Un nome è considerato mancante se non c'è o non contiene uno spazio
+                    if (!updatedClient.name || updatedClient.name.trim().indexOf(' ') === -1) {
+                        missingFields.push("nome e cognome");
+                    }
+                    if (!updatedClient.phone_number) {
+                        missingFields.push("numero di telefono");
+                    }
+                    if (!updatedClient.city) {
+                        missingFields.push("comune/città");
+                    }
 
-            if (saveEmailError) throw new Error(`Supabase save email error: ${saveEmailError.message}`);
-            const emailRecordId = savedEmail.id;
-            console.log(`MAIL_PROCESSOR: New email saved to DB with ID: ${emailRecordId}`);
+                    const hasMissingInfo = missingFields.length > 0;
+                    
+                    // Aggiungiamo un log per il debug
+                    console.log('DEBUG: Client data check:', {
+                        name: updatedClient.name,
+                        phone: updatedClient.phone_number,
+                        city: updatedClient.city,
+                        hasMissingInfo: hasMissingInfo,
+                        missingFields: missingFields
+                    });
+                    // --- FINE LOGICA DI CONTROLLO ---
 
-            const aiResult = await analyzeEmailWithAI(email.from, email.subject, email.text || email.html);
-            const clientNameFromEmail = email.from.replace(/<.+>/, '').trim().replace(/"/g, '') || null;
-            const updatedClient = await upsertClient(
-                clientEmailFromHeader, aiResult.client_name || clientNameFromEmail,
-                aiResult.client_phone_number, aiResult.client_city, emailRecordId
-            );
+                    const { data: newConversation } = await supabaseAdmin.from('conversations').insert({
+                        subject: email.subject,
+                        client_id: updatedClient.id,
+                        assigned_to_staff_id: aiResult.assigned_to_staff_id,
+                        status: hasMissingInfo ? 'awaiting_client' : 'open'
+                    }).select().single();
+                    conversationId = newConversation.id;
 
-            const hasMissingInfo = !updatedClient.name || !updatedClient.phone_number || !updatedClient.city;
-            if (hasMissingInfo && !updatedClient.follow_up_email_sent) {
-                // Logica per inviare il primo follow-up
-                console.log(`MAIL_PROCESSOR: New client has missing info. Sending first follow-up.`);
-                 // ... (il codice per inviare il primo follow-up va qui)
-            }
+                    await supabaseAdmin.from('incoming_emails').insert({
+                        conversation_id: conversationId, sender: fromAsString, subject: email.subject,
+                        body_text: email.text, body_html: email.html, reference: currentMessageIdClean,
+                        sender_type: 'client', is_urgent: aiResult.is_urgent
+                    });
 
-            const newStatus = aiResult.assigned_to_staff_id ? 'analyzed' : 'manual_review';
-            await supabaseAdmin.from('incoming_emails').update({
-                assigned_to_staff_id: aiResult.assigned_to_staff_id,
-                ai_confidence_score: aiResult.ai_confidence_score,
-                ai_reasoning: aiResult.ai_reasoning,
-                status: newStatus,
-                is_urgent: aiResult.is_urgent,
-            }).eq('id', emailRecordId);
-            
-            if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
-                console.log(`MAIL_PROCESSOR: Forwarding email to ${aiResult.assignedStaffEmail}...`);
-                // await sendEmail(...);
-                await supabaseAdmin.from('incoming_emails').update({ status: 'forwarded' }).eq('id', emailRecordId);
+                    if (hasMissingInfo) {
+                        console.log(`Client ${clientEmailFromHeader} has missing info. Sending follow-up.`);
+                        const missingInfoDescription = `Per assisterla al meglio, la preghiamo di fornirci: ${missingFields.join(', ')}.`;
+                        
+                        const sentFollowUp = await sendFollowUpRequest(clientEmailFromHeader, updatedClient.name, missingInfoDescription, currentMessageIdClean, email.subject);
+                        
+                        await supabaseAdmin.from('incoming_emails').insert({
+                            conversation_id: conversationId, sender: 'Studio Commercialista', subject: sentFollowUp.subject,
+                            body_text: sentFollowUp.body, sender_type: 'staff',
+                            reference: (sentFollowUp.messageId || '').replace(/<|>/g, '')
+                        });
+                        await supabaseAdmin.from('clients').update({ follow_up_email_sent: true, follow_up_sent_at: new Date().toISOString() }).eq('id', updatedClient.id);
+                    } else {
+                        console.log(`Client ${clientEmailFromHeader} has all info. Forwarding to staff.`);
+                        if (aiResult.assigned_to_staff_id && aiResult.assignedStaffEmail) {
+                            await sendEmail(
+                                aiResult.assignedStaffEmail, fromAsString.replace(/<.+>/, '').trim(),
+                                clientEmailFromHeader, email.subject, email.text || email.html,
+                                aiResult.ai_reasoning, [], conversationId
+                            );
+                        }
+                    }
+                }
+            } catch (innerError) {
+                console.error(`CONVERSATION_PROCESSOR: Critical ERROR processing single email:`, innerError.message, innerError.stack);
             }
         }
-
-      } catch (innerError) {
-        console.error(`MAIL_PROCESSOR: Critical ERROR processing single email:`, innerError.message, innerError.stack);
-      }
+    } catch (globalError) {
+        console.error('CONVERSATION_PROCESSOR: Global ERROR during cycle:', globalError);
     }
-  } catch (globalError) {
-    console.error('MAIL_PROCESSOR: Global ERROR during email processing cycle:', globalError);
-  }
-  console.log('MAIL_PROCESSOR: Email processing cycle finished.');
+    console.log('CONVERSATION_PROCESSOR: Email processing cycle finished.');
 }

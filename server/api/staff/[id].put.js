@@ -1,57 +1,78 @@
 // server/api/staff/[id].put.js
 
-import { defineEventHandler, readBody, createError, getRouterParams } from 'h3';
+// --- MODIFICA QUI ---
+// Abbiamo separato gli import. `serverSupabaseUser` ora viene da '#supabase/server'.
+import { defineEventHandler, readBody, getRouterParams } from 'h3';
+import { serverSupabaseUser } from '#supabase/server';
+// --- FINE MODIFICA ---
+
 import { getSupabaseAdminClient } from '../../utils/supabaseAdmin';
-import { extractSkillsFromText } from '../../utils/skillExtractor'; // GiÃƒÂ  esistente
+import { extractSkillsFromText } from '../../utils/skillExtractor';
 
 export default defineEventHandler(async (event) => {
-    console.log('*** API STAFF PUT: ENDPOINT RAGGIUNTO ***');
-  const supabaseAdmin = getSupabaseAdminClient(); // Usa il client Supabase Admin
-  const { id } = getRouterParams(event); // Ottiene l'ID dalla URL
-  const body = await readBody(event);
-  const { text_skills } = body; // Ci aspettiamo solo text_skills dal frontend
+    const supabaseAdmin = getSupabaseAdminClient();
+    const { id: staffIdToUpdate } = getRouterParams(event); // ID del profilo da aggiornare
+    const user = await serverSupabaseUser(event); // Utente autenticato che fa la richiesta
 
-  console.log('API Staff PUT: Ricevuti dati per ID:', id, '-> text_skills:', text_skills ? text_skills.substring(0, 50) + '...' : 'N/A');
+    // 1. Sicurezza: Controlla che ci sia un utente autenticato
+    if (!user) {
+        throw createError({ statusCode: 401, statusMessage: 'Unauthorized' });
+    }
 
+    // 2. Sicurezza: Controlla che l'utente stia modificando il proprio profilo staff
+    const { data: userStaffProfile, error: profileError } = await supabaseAdmin
+        .from('staff')
+        .select('id, role')
+        .eq('user_id', user.id)
+        .single();
+    
+    if (profileError || !userStaffProfile) {
+        throw createError({ statusCode: 403, statusMessage: 'Forbidden: No staff profile found for this user.' });
+    }
+    
+    // Un utente può modificare se stesso, un admin può modificare chiunque
+    if (userStaffProfile.id !== staffIdToUpdate && userStaffProfile.role !== 'admin') {
+         throw createError({ statusCode: 403, statusMessage: 'Forbidden: You can only update your own profile.' });
+    }
 
-  if (!id) {
-    throw createError({ statusCode: 400, statusMessage: 'ID dipendente mancante.' });
-  }
-  if (text_skills === undefined || text_skills === null || text_skills.trim() === '') {
-    throw createError({ statusCode: 400, statusMessage: 'Il campo "Descrizione Competenze" non puÃƒÂ² essere vuoto.' });
-  }
+    // 3. Leggi il body e prepara l'aggiornamento
+    const body = await readBody(event);
+    const { first_name, last_name, text_skills } = body;
 
-  try {
-    // 1. Estrai le skills aggiornate dall'AI
-    console.log('API Staff PUT: Chiamata a skillExtractor per text_skills:', text_skills ? text_skills.substring(0, 50) + '...' : 'N/A');
-    const skills = await extractSkillsFromText(text_skills);
-    console.log('API Staff PUT: Skills estratte dall\'AI:', skills);
+    const updatePayload = {};
 
-    // 2. Aggiorna il record nel database
+    if (first_name) updatePayload.first_name = first_name;
+    if (last_name) updatePayload.last_name = last_name;
+    
+    // Solo se text_skills è presente, ricalcola le skills
+    if (text_skills !== undefined && text_skills !== null) {
+        if (text_skills.trim() === '') {
+            throw createError({ statusCode: 400, statusMessage: 'Il campo "Descrizione Competenze" non può essere vuoto.' });
+        }
+        updatePayload.text_skills = text_skills;
+        updatePayload.skills = await extractSkillsFromText(text_skills);
+    }
+    
+    if (Object.keys(updatePayload).length === 0) {
+        return { status: 'noop', message: 'Nessun dato da aggiornare.' };
+    }
+    
+    // 4. Esegui l'aggiornamento
     const { data, error } = await supabaseAdmin
       .from('staff')
-      .update({
-        text_skills: text_skills,
-        skills: skills,
-      })
-      .eq('id', id)
-      .select() // Per ottenere il record aggiornato
+      .update(updatePayload)
+      .eq('id', staffIdToUpdate)
+      .select()
       .single();
 
     if (error) {
       console.error('API Supabase staff update error:', error.message);
-      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento del dipendente: ${error.message}` });
+      throw createError({ statusCode: 500, statusMessage: `Errore durante l'aggiornamento: ${error.message}` });
     }
 
     if (!data) {
-      // Questo caso si verifica se l'ID non corrisponde a nessun record
-      throw createError({ statusCode: 404, statusMessage: 'Dipendente non trovato.' });
+      throw createError({ statusCode: 404, statusMessage: 'Profilo staff non trovato.' });
     }
 
-    console.log('API Staff PUT: Dipendente aggiornato con successo:', data);
-    return { status: 'success', message: 'Dipendente aggiornato con successo!', data: data };
-  } catch (e) {
-    console.error('Errore nel processare la richiesta PUT per staff:', e);
-    throw createError({ statusCode: e.statusCode || 500, statusMessage: e.statusMessage || 'Errore interno del server.' });
-  }
+    return { status: 'success', message: 'Profilo aggiornato con successo!', data: data };
 });

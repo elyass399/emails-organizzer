@@ -1,5 +1,4 @@
-// File: server/api/inbox.get.js
-
+// server/api/inbox.get.js
 import { defineEventHandler } from 'h3';
 import { serverSupabaseClient } from '#supabase/server';
 
@@ -18,12 +17,10 @@ export default defineEventHandler(async (event) => {
       is_urgent,
       ai_confidence_score,
       assigned_to_staff_id, 
-      staff:assigned_to_staff_id ( id, name, email, text_skills, skills ),
+      staff:assigned_to_staff_id ( id, first_name, last_name, email ),
       attachments:email-attachments ( filename, mimetype, size, public_url )
     `)
-    // Filtra per mostrare solo le email che hanno un'assegnazione
     .not('assigned_to_staff_id', 'is', null) 
-    // Esclude esplicitamente i nostri follow-up inviati (buona pratica)
     .neq('status', 'follow_up_sent')
     .order('created_at', { ascending: false });
 

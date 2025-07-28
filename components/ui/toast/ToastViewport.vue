@@ -4,7 +4,7 @@ import { reactiveOmit } from '@vueuse/core'
 import { ToastViewport, type ToastViewportProps } from 'reka-ui'
 import { cn } from '@/lib/utils'
 
-const props = defineProps</* @vue-ignore */ ToastViewportProps & { class?: HTMLAttributes['class'] }>() // Aggiungi qui
+const props = defineProps</* @vue-ignore */ ToastViewportProps & { class?: HTMLAttributes['class'] }>()
 
 const delegatedProps = reactiveOmit(props, 'class')
 </script>
@@ -12,6 +12,16 @@ const delegatedProps = reactiveOmit(props, 'class')
 <template>
   <ToastViewport
     v-bind="delegatedProps"
-    :class="cn('fixed top-0 right-0 z-[100] flex max-h-screen w-full flex-col p-4 md:max-w-[420px]', props.class)"
+    :class="cn(
+      /*
+        MODIFICA CHIAVE QUI:
+        - Cambiato `top-0` in `bottom-0` per posizionare in basso.
+        - Rimosso `flex-col` perché l'ordine di apparizione dei toast
+          (dal basso verso l'alto) è gestito automaticamente dalla libreria.
+      */
+      'fixed bottom-0 right-0 z-[100] flex max-h-screen flex-col-reverse gap-4 p-4', 
+      'w-full max-w-[420px] sm:w-auto',
+      props.class
+    )"
   />
 </template>

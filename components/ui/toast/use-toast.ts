@@ -10,7 +10,8 @@ export type StringOrVNode =
   | VNode
   | (() => VNode)
 
-type ToasterToast = ToastProps & {
+// Assicuriamoci che ogni proprietà sia opzionale ma presente
+type ToasterToast = Partial<ToastProps> & {
   id: string
   title?: string
   description?: StringOrVNode
@@ -96,13 +97,13 @@ function dispatch(action: Action) {
 
     case 'DISMISS_TOAST': {
       const { toastId } = action
+      // Imposta 'open' a false per avviare l'animazione di chiusura
       if (toastId) {
-        state.value.toasts = state.value.toasts.filter(
-          t => t.id !== toastId,
+        state.value.toasts = state.value.toasts.map(t =>
+          t.id === toastId ? { ...t, open: false } : t,
         )
-      }
-      else {
-        state.value.toasts = []
+      } else {
+        state.value.toasts = state.value.toasts.map(t => ({ ...t, open: false }))
       }
       break
     }
@@ -117,14 +118,6 @@ function dispatch(action: Action) {
   }
 }
 
-function useToast() {
-  return {
-    toasts: computed(() => state.value.toasts),
-    toast,
-    dismiss: (toastId?: string) => dispatch({ type: 'DISMISS_TOAST', toastId }),
-  }
-}
-
 type Toast = Omit<ToasterToast, 'id'>
 
 function toast(props: Toast) {
@@ -135,7 +128,8 @@ function toast(props: Toast) {
       type: 'UPDATE_TOAST',
       toast: { ...props, id },
     })
-  const dismiss = () => dispatch({ type: 'DISMISS_TOAST', toastId: id })
+    
+  const dismiss = () => dispatch({ type: 'REMOVE_TOAST', toastId: id });
 
   dispatch({
     type: 'ADD_TOAST',
@@ -144,8 +138,12 @@ function toast(props: Toast) {
       id,
       open: true,
       onOpenChange: (open: boolean) => {
-        if (!open)
-          dismiss()
+        if (!open) {
+            // Rimuovi il toast dall'array dopo un breve ritardo per permettere l'animazione
+            setTimeout(() => {
+                dismiss()
+            }, 500); // 500ms delay
+        }
       },
     },
   })
@@ -156,5 +154,14 @@ function toast(props: Toast) {
     update,
   }
 }
+
+function useToast() {
+  return {
+    toasts: computed(() => state.value.toasts),
+    toast,
+    dismiss: (toastId?: string) => dispatch({ type: 'DISMISS_TOAST', toastId }),
+  }
+}
+
 
 export { useToast, toast }

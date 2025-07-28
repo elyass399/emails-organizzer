@@ -1,24 +1,29 @@
 <script setup lang="ts">
-import { reactiveOmit } from '@vueuse/core'
 import { ToastRoot, type ToastRootEmits, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils'
 import { type ToastProps, toastVariants } from '.'
+import type { VariantProps } from 'class-variance-authority'
 
-const props = defineProps</* @vue-ignore */ ToastProps>() // Aggiungi qui
+// Definiamo le props in modo esplicito
+const props = withDefaults(defineProps<ToastProps & {
+  class?: string;
+  variant?: VariantProps<typeof toastVariants>['variant'];
+  open?: boolean;
+}>(), {
+  open: true, // Default open a true
+});
 
 const emits = defineEmits<ToastRootEmits>()
 
-// Passa solo le props che ToastRoot di reka-ui si aspetta, escludendo quelle aggiuntive per use-toast
-const delegatedProps = reactiveOmit(props, 'class', 'title', 'description', 'action')
+// Usiamo useForwardPropsEmits per passare le props corrette a ToastRoot
+const forwarded = useForwardPropsEmits(props, emits)
 
-const forwarded = useForwardPropsEmits(delegatedProps, emits)
 </script>
 
 <template>
   <ToastRoot
     v-bind="forwarded"
-    :class="cn(toastVariants({ variant }), props.class)"
-    @update:open="props.onOpenChange"
+    :class="cn(toastVariants({ variant: props.variant }), props.class)"
   >
     <slot />
   </ToastRoot>
